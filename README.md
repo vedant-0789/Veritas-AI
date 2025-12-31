@@ -7,7 +7,7 @@
 
 > **The Digital Bio-Guard: Real-time Deepfake Detection using Biometric Signal Analysis (rPPG) and Multimodal AI.**
 
-![Veritas-AI Banner](docs/assets/banner_dark.png)
+![Veritas-AI Banner](docs/assets/banner_final.png)
 
 Veritas-AI is an open-source browser extension designed to restore trust in digital media. It verifies video authenticity by detecting **rPPG (Remote Photoplethysmography)** signals — the subtle, invisible pulse-induced skin color changes that generative AI and deepfakes currently cannot replicate faithfully.
 
