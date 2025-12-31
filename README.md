@@ -2,7 +2,7 @@
 
 > **Real-time Deepfake Detection using Biometric Signal Analysis (rPPG) and Multimodal AI.**
 
-![Veritas-AI Banner](https://via.placeholder.com/1200x400/0f172a/38bdf8?text=Veritas-AI+|+Defending+Authenticity)
+![Veritas-AI Banner](docs/assets/banner.png)
 
 Veritas-AI is a Chrome Extension that acts as a digital "Bio-Guard", verifying video authenticity by detecting the subtle, invisible physiological signals of life (hair-color changes due to blood flow) that generative AI currently fails to replicate.
 
@@ -20,6 +20,19 @@ Veritas-AI is a Chrome Extension that acts as a digital "Bio-Guard", verifying v
 - **Backend**: Python, FastAPI, OpenCV, NumPy, SciPy
 - **AI Core**: MediaPipe (Face Mesh), Google Gemini 2.0 Flash
 - **Communication**: REST API (Localhost)
+- **Monitoring**: Real-time logging & forensic reporting
+
+## 📚 Documentation
+
+Detailed documentation for various aspects of the project:
+
+- [Project Overview](docs/PROJECT_OVERVIEW.md) - Deep dive into the problem and solution.
+- [Final Features](docs/FINAL_FEATURES.md) - Comprehensive list of implemented features.
+- [Testing Guide](docs/TESTING_GUIDE.md) - Detailed instructions for verifying the system.
+- [Deployment Guide](docs/DEPLOYMENT.md) - How to deploy the backend and extension.
+- [Improvements Summary](docs/IMPROVEMENTS_SUMMARY.md) - List of recent technical upgrades.
+- [Fixes Applied](docs/FIXES_APPLIED.md) - History of bugs found and resolved.
+- [MediaPipe Fixes](docs/MEDIAPIPE_FIX.md) - Technical details on face-mesh stabilization.
 
 ## 🚀 Getting Started
 

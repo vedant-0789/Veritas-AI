@@ -15,14 +15,25 @@ import io
 
 try:
     import mediapipe as mp
-    # Test if solutions attribute exists (compatibility check)
-    if hasattr(mp, 'solutions'):
-        MEDIAPIPE_AVAILABLE = True
+    # Check for old API (solutions) or new API (tasks)
+    if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_mesh'):
+        # Old API available
+        try:
+            test_mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1)
+            test_mesh.close()
+            MEDIAPIPE_AVAILABLE = True
+            MEDIAPIPE_USE_OLD_API = True
+            print("✅ MediaPipe (old API) initialized successfully")
+        except Exception as e:
+            raise ImportError(f"MediaPipe old API failed: {e}")
     else:
-        raise ImportError("MediaPipe solutions not available")
-except (ImportError, AttributeError) as e:
+        # New API or not available - use fallback
+        raise ImportError("MediaPipe solutions API not available (new API detected or not installed)")
+except (ImportError, AttributeError, Exception) as e:
     MEDIAPIPE_AVAILABLE = False
-    print(f"Warning: MediaPipe not fully available ({e}). Using fallback face detection.")
+    MEDIAPIPE_USE_OLD_API = False
+    print(f"⚠️ Warning: MediaPipe not available ({e}). Using OpenCV fallback face detection.")
+    print(f"   Note: Pulse detection will still work using center ROI method.")
 
 
 class RPPGAnalyzer:
@@ -39,8 +50,8 @@ class RPPGAnalyzer:
         self.min_freq = self.min_bpm / 60.0  # 0.67 Hz
         self.max_freq = self.max_bpm / 60.0  # 4.0 Hz
         
-        # Initialize MediaPipe Face Mesh
-        if MEDIAPIPE_AVAILABLE:
+        # Initialize MediaPipe Face Mesh or OpenCV fallback
+        if MEDIAPIPE_AVAILABLE and MEDIAPIPE_USE_OLD_API:
             self.mp_face_mesh = mp.solutions.face_mesh
             self.face_mesh = self.mp_face_mesh.FaceMesh(
                 static_image_mode=False,
@@ -51,6 +62,16 @@ class RPPGAnalyzer:
             )
         else:
             self.face_mesh = None
+            # Initialize OpenCV face detector as fallback
+            try:
+                cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                self.face_cascade = cv2.CascadeClassifier(cascade_path)
+                if self.face_cascade.empty():
+                    self.face_cascade = None
+                else:
+                    print("✅ Using OpenCV face detection fallback")
+            except:
+                self.face_cascade = None
         
         # ROI landmark indices for MediaPipe Face Mesh
         # Forehead region
@@ -115,19 +136,47 @@ class RPPGAnalyzer:
             bpm, snr, confidence = self._analyze_frequency(filtered_signal)
             
             # Determine if pulse is detected
-            # Increased threshold to 4.0 to reduce false positives from noise/compression
-            pulse_detected = confidence > 0.5 and snr > 4.0
+            # Lower threshold for better detection - adjust based on signal quality
+            # For good quality videos, even SNR > 2 can indicate pulse
+            # For compressed videos, we need higher SNR
+            pulse_detected = confidence > 0.3 and snr > 2.0
             
-            # Generate assessment
+            # If we have good signal quality indicators, be more lenient
+            if snr > 5.0 and 50 <= bpm <= 120:
+                pulse_detected = True
+            elif snr < 1.5:
+                pulse_detected = False
+            
+            # Additional analysis: eye blink detection and landmark stability
+            blink_analysis = self._analyze_eye_blinks(decoded_frames) if MEDIAPIPE_AVAILABLE else None
+            landmark_stability = self._analyze_landmark_stability(decoded_frames) if MEDIAPIPE_AVAILABLE else None
+            
+            # Enhanced assessment with more details
+            assessment_parts = []
             if pulse_detected:
-                assessment = f"Likely Real - Biological pulse detected ({int(bpm)} BPM)"
                 if snr > 10:
-                    assessment = f"Highly Likely Real - Strong biological signals ({int(bpm)} BPM, SNR: {snr:.1f})"
+                    assessment_parts.append(f"Highly Likely Real - Strong biological pulse detected ({int(bpm)} BPM, SNR: {snr:.1f})")
+                else:
+                    assessment_parts.append(f"Likely Real - Biological pulse detected ({int(bpm)} BPM)")
             else:
                 if snr < 1:
-                    assessment = "Likely Fake - No biological pulse signal detected"
+                    assessment_parts.append("Likely Fake - No biological pulse signal detected")
                 else:
-                    assessment = "Uncertain - Weak biological signals (may be compressed video)"
+                    assessment_parts.append("Uncertain - Weak biological signals (may be compressed video)")
+            
+            # Add blink information if available
+            if blink_analysis and blink_analysis.get("blinks_detected", 0) > 0:
+                assessment_parts.append(f"Natural eye blinks detected ({blink_analysis['blinks_detected']} blinks)")
+            
+            # Add landmark stability if available
+            if landmark_stability:
+                stability_score = landmark_stability.get("stability_score", 0.5)
+                if stability_score > 0.8:
+                    assessment_parts.append("Stable facial landmarks detected")
+                elif stability_score < 0.5:
+                    assessment_parts.append("Unstable facial landmarks (possible manipulation)")
+            
+            assessment = ". ".join(assessment_parts) if assessment_parts else "Analysis complete"
             
             return {
                 "pulse_detected": pulse_detected,
@@ -135,10 +184,13 @@ class RPPGAnalyzer:
                 "confidence": round(confidence, 3),
                 "snr": round(snr, 2),
                 "assessment": assessment,
+                "blink_analysis": blink_analysis,
+                "landmark_stability": landmark_stability,
                 "details": {
                     "frames_analyzed": len(decoded_frames),
                     "signal_quality": "good" if snr > 5 else "fair" if snr > 2 else "poor",
-                    "algorithm": "POS (Plane-Orthogonal-to-Skin)"
+                    "algorithm": "POS (Plane-Orthogonal-to-Skin)",
+                    "temporal_analysis": "enabled" if len(decoded_frames) >= 10 else "insufficient_frames"
                 }
             }
             
@@ -233,20 +285,51 @@ class RPPGAnalyzer:
             return None
     
     def _extract_center_roi(self, frames: List[np.ndarray]) -> np.ndarray:
-        """Fallback: extract RGB from center region of frame"""
+        """Fallback: extract RGB from face region using OpenCV or center region"""
         rgb_signals = []
         
         for frame in frames:
             h, w = frame.shape[:2]
-            # Use center 20% of frame
+            
+            # Try OpenCV face detection first
+            if hasattr(self, 'face_cascade') and self.face_cascade is not None:
+                try:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY) if len(frame.shape) == 3 else frame
+                    faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
+                    if len(faces) > 0:
+                        x, y, fw, fh = faces[0]
+                        # Extract face region with some padding
+                        y1 = max(0, y - int(fh * 0.1))
+                        y2 = min(h, y + int(fh * 1.1))
+                        x1 = max(0, x - int(fw * 0.1))
+                        x2 = min(w, x + int(fw * 1.1))
+                        roi = frame[y1:y2, x1:x2]
+                        if roi.size > 0:
+                            mean_rgb = np.mean(roi, axis=(0, 1))
+                            rgb_signals.append(mean_rgb)
+                            continue
+                except:
+                    pass
+            
+            # Fallback to center region
             y1, y2 = int(h * 0.3), int(h * 0.5)
             x1, x2 = int(w * 0.4), int(w * 0.6)
             
             roi = frame[y1:y2, x1:x2]
-            mean_rgb = np.mean(roi, axis=(0, 1))
-            rgb_signals.append(mean_rgb)
+            if roi.size > 0:
+                mean_rgb = np.mean(roi, axis=(0, 1))
+                rgb_signals.append(mean_rgb)
         
-        return np.array(rgb_signals)
+        if len(rgb_signals) == 0:
+            # Last resort: use entire frame center
+            for frame in frames:
+                h, w = frame.shape[:2]
+                center_roi = frame[int(h*0.4):int(h*0.6), int(w*0.4):int(w*0.6)]
+                if center_roi.size > 0:
+                    mean_rgb = np.mean(center_roi, axis=(0, 1))
+                    rgb_signals.append(mean_rgb)
+        
+        return np.array(rgb_signals) if rgb_signals else None
     
     def _apply_pos_algorithm(self, rgb_signals: np.ndarray) -> np.ndarray:
         """
@@ -346,25 +429,181 @@ class RPPGAnalyzer:
             snr = 10 * np.log10(signal_power / (noise_power + 1e-8))
             
             # Calculate confidence based on SNR and peak prominence
+            # More generous confidence scoring for better detection
             if snr > 10:
                 confidence = 0.95
+            elif snr > 7:
+                confidence = 0.85 + (snr - 7) * 0.033  # 0.85 to 0.95
             elif snr > 5:
-                confidence = 0.75 + (snr - 5) * 0.04
+                confidence = 0.70 + (snr - 5) * 0.075  # 0.70 to 0.85
+            elif snr > 3:
+                confidence = 0.50 + (snr - 3) * 0.10   # 0.50 to 0.70
             elif snr > 2:
-                confidence = 0.5 + (snr - 2) * 0.083
+                confidence = 0.35 + (snr - 2) * 0.15  # 0.35 to 0.50
             else:
-                confidence = max(0.1, snr * 0.25)
+                confidence = max(0.1, snr * 0.15)
             
-            # Adjust confidence if BPM is in normal human range
+            # Adjust confidence if BPM is in normal human range (strong indicator)
             if 50 <= bpm <= 120:
-                confidence = min(1.0, confidence * 1.1)
-            elif bpm < 40 or bpm > 200:
-                confidence *= 0.5
+                confidence = min(1.0, confidence * 1.15)  # Boost for normal BPM
+            elif 40 <= bpm <= 150:
+                confidence = min(1.0, confidence * 1.05)  # Slight boost for acceptable range
+            elif bpm < 30 or bpm > 200:
+                confidence *= 0.4  # Strong penalty for unrealistic BPM
+            else:
+                confidence *= 0.7  # Moderate penalty for unusual BPM
             
             return bpm, max(0, snr), min(1.0, confidence)
             
         except Exception as e:
             return 0, 0, 0
+    
+    def _analyze_eye_blinks(self, frames: List[np.ndarray]) -> Optional[Dict]:
+        """Analyze eye blinks as a sign of natural human behavior"""
+        if not MEDIAPIPE_AVAILABLE or self.face_mesh is None or len(frames) < 10:
+            return None
+        
+        try:
+            # Eye landmark indices (left and right eye)
+            left_eye_indices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+            right_eye_indices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
+            
+            eye_openness = []
+            
+            for frame in frames:
+                results = self.face_mesh.process(frame)
+                if results.multi_face_landmarks:
+                    landmarks = results.multi_face_landmarks[0]
+                    h, w = frame.shape[:2]
+                    
+                    # Calculate eye aspect ratio (EAR) for both eyes
+                    left_ear = self._calculate_eye_aspect_ratio(landmarks, left_eye_indices, w, h)
+                    right_ear = self._calculate_eye_aspect_ratio(landmarks, right_eye_indices, w, h)
+                    
+                    # Average EAR
+                    avg_ear = (left_ear + right_ear) / 2.0 if left_ear and right_ear else None
+                    if avg_ear is not None:
+                        eye_openness.append(avg_ear)
+            
+            if len(eye_openness) < 5:
+                return None
+            
+            # Detect blinks (EAR drops below threshold)
+            blink_threshold = 0.25  # Typical threshold for blink detection
+            blinks = 0
+            in_blink = False
+            
+            for ear in eye_openness:
+                if ear < blink_threshold and not in_blink:
+                    blinks += 1
+                    in_blink = True
+                elif ear >= blink_threshold:
+                    in_blink = False
+            
+            # Real humans blink regularly (about 15-20 times per minute)
+            # For a 15-frame sequence at 30fps (0.5 seconds), expect 0-1 blinks
+            expected_blinks_min = 0.125  # 15 blinks/min * 0.5 sec / 60
+            expected_blinks_max = 0.167  # 20 blinks/min * 0.5 sec / 60
+            
+            blink_rate_normal = 0 <= blinks <= 2  # Allow some variance
+            
+            return {
+                "blinks_detected": blinks,
+                "blink_rate_normal": blink_rate_normal,
+                "avg_eye_openness": round(np.mean(eye_openness), 3),
+                "eye_variance": round(np.var(eye_openness), 3),
+                "assessment": "Natural blinking detected" if blink_rate_normal and blinks > 0 else "No blinks detected (may indicate static deepfake)"
+            }
+            
+        except Exception as e:
+            return None
+    
+    def _calculate_eye_aspect_ratio(self, landmarks, eye_indices: List[int], w: int, h: int) -> Optional[float]:
+        """Calculate Eye Aspect Ratio (EAR) for blink detection"""
+        try:
+            points = []
+            for idx in eye_indices:
+                lm = landmarks.landmark[idx]
+                x, y = int(lm.x * w), int(lm.y * h)
+                points.append((x, y))
+            
+            if len(points) < 6:
+                return None
+            
+            # Calculate vertical distances
+            vertical_1 = np.linalg.norm(np.array(points[1]) - np.array(points[5]))
+            vertical_2 = np.linalg.norm(np.array(points[2]) - np.array(points[4]))
+            
+            # Calculate horizontal distance
+            horizontal = np.linalg.norm(np.array(points[0]) - np.array(points[3]))
+            
+            # EAR formula
+            if horizontal == 0:
+                return None
+            
+            ear = (vertical_1 + vertical_2) / (2.0 * horizontal)
+            return ear
+            
+        except Exception:
+            return None
+    
+    def _analyze_landmark_stability(self, frames: List[np.ndarray]) -> Optional[Dict]:
+        """Analyze stability of facial landmarks across frames"""
+        if not MEDIAPIPE_AVAILABLE or self.face_mesh is None or len(frames) < 5:
+            return None
+        
+        try:
+            landmark_positions = []
+            
+            for frame in frames:
+                results = self.face_mesh.process(frame)
+                if results.multi_face_landmarks:
+                    landmarks = results.multi_face_landmarks[0]
+                    h, w = frame.shape[:2]
+                    
+                    # Extract key landmark positions (nose, eyes, mouth)
+                    key_indices = [1, 33, 61, 199, 291, 13, 14, 15, 16, 17, 18]  # Nose, eyes, mouth
+                    positions = []
+                    for idx in key_indices:
+                        lm = landmarks.landmark[idx]
+                        positions.append([lm.x * w, lm.y * h])
+                    
+                    landmark_positions.append(np.array(positions))
+            
+            if len(landmark_positions) < 3:
+                return None
+            
+            # Calculate stability (low variance = stable)
+            landmark_positions = np.array(landmark_positions)
+            variances = np.var(landmark_positions, axis=0)
+            avg_variance = np.mean(variances)
+            
+            # Normalize variance (lower is better, higher stability)
+            # Typical variance for stable face: < 100 pixels^2
+            if avg_variance < 50:
+                stability_score = 0.95
+                assessment = "Highly stable landmarks"
+            elif avg_variance < 100:
+                stability_score = 0.85
+                assessment = "Stable landmarks"
+            elif avg_variance < 200:
+                stability_score = 0.65
+                assessment = "Moderate stability"
+            elif avg_variance < 500:
+                stability_score = 0.4
+                assessment = "Unstable landmarks (possible manipulation)"
+            else:
+                stability_score = 0.2
+                assessment = "Very unstable landmarks (likely deepfake)"
+            
+            return {
+                "stability_score": round(stability_score, 3),
+                "variance": round(avg_variance, 2),
+                "assessment": assessment
+            }
+            
+        except Exception:
+            return None
     
     def __del__(self):
         """Cleanup resources"""

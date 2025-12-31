@@ -137,60 +137,75 @@ class GeminiAnalyzer:
             return None
     
     def _create_analysis_prompt(self) -> str:
-        """Create the analysis prompt for Gemini"""
-        return """You are an expert forensic analyst specialized in detecting AI-generated and manipulated video content (deepfakes).
+        """Create the enhanced analysis prompt for Gemini with real/fake discrimination"""
+        return """You are an expert forensic video analyst specializing in deepfake detection. Your task is to determine if a video is REAL (authentic human) or FAKE (AI-generated/manipulated).
 
-Analyze these video frames carefully for signs of synthetic or manipulated content. Look for:
+CRITICAL INSTRUCTIONS:
+- You MUST be able to confidently identify REAL videos, not just detect fakes
+- Real videos should show STRONG POSITIVE EVIDENCE of authenticity
+- Be decisive: if evidence strongly points to real, say so with confidence
+- If evidence strongly points to fake, say so with confidence
+- Only be uncertain if evidence is genuinely mixed
 
-1. **Facial Boundary Artifacts**: Unnatural edges, blending, or flickering around the face, hair, and neck boundaries.
+REAL VIDEO INDICATORS (Positive Evidence - Look for these):
+1. Natural skin texture with subtle variations, pores, and imperfections
+2. Consistent lighting and shadows that match physics and light sources
+3. Natural eye movements, blinks, and realistic eye reflections (eyes should reflect environment)
+4. Realistic micro-expressions and natural facial movements
+5. Natural hair movement, texture, and individual strands visible
+6. Consistent background depth of field changes when face moves
+7. Natural lip-sync with jaw and cheek movement coordination
+8. Subtle skin imperfections (pores, blemishes, natural variations)
+9. Natural head movement that feels connected to body movement
+10. Realistic skin tone variations and natural color gradients
+11. Natural breathing movements (subtle chest/neck movement)
+12. Realistic shadows under chin, nose, and facial features
+13. Natural eye contact and pupil dilation
+14. Realistic skin elasticity and natural wrinkles
 
-2. **Lighting Inconsistencies**: 
-   - Shadows that don't match the apparent light source
-   - Inconsistent highlights on the face vs. background
-   - Specular reflections that seem wrong
+FAKE VIDEO INDICATORS (Negative Evidence - Red flags):
+1. Unnatural facial boundaries, blending, or flickering edges
+2. Inconsistent lighting/shadows that don't match physics
+3. Unusual eye reflections, "dead eyes", or unnatural iris patterns
+4. Flickering textures or colors between frames
+5. Perfect symmetry (too perfect to be natural)
+6. Static background with no depth of field changes
+7. Lip-sync issues (mouth moves but jaw/cheeks don't)
+8. Unnatural hair movement or texture (too smooth or too uniform)
+9. Teeth appearing through lips or other physical impossibilities
+10. Robotic or disconnected head/body movement
+11. Unnatural skin smoothness (too perfect)
+12. Inconsistent shadows or lighting on face vs background
+13. Eyes that don't reflect environment or look "pasted on"
+14. Unnatural color bleeding or halo effects around face
 
-3. **Eye Anomalies**:
-   - Unusual reflections in the eyes
-   - Asymmetric eye movements or blinks
-   - Unnatural iris patterns
+IMPORTANT DISTINCTIONS:
+- Real videos may have compression artifacts - don't confuse these with deepfake artifacts
+- Compression artifacts are uniform and affect the whole frame; deepfake artifacts are localized to face/body areas
+- Real videos should show natural human characteristics and imperfections
+- High-quality real videos may look "too good" but will have natural imperfections
+- Be confident when you see strong evidence of authenticity
 
-4. **Temporal Inconsistencies** (comparing frames):
-   - Flickering textures or colors
-   - Inconsistent skin texture between frames
-   - Background stability issues
-
-5. **Physical Impossibilities**:
-   - Teeth appearing through lips
-   - Hair moving unnaturally
-   - Clothing/jewelry inconsistencies
-
-6. **AI Avatar Indicators**:
-   - Perfect symmetry in facial features
-   - Lack of micro-expressions or "dead eyes"
-   - Lip-sync issues (mouth moving but jaw/cheeks static)
-   - Head movement that feels robotic or divorced from body movement
-   - Static background with no depth of field changes
-
-7. **Compression Artifacts vs. Deepfake Artifacts**:
-   - Distinguish between normal video compression and AI manipulation
-
-**CRITICAL INSTRUCTION**: 
-You must think step-by-step before deciding. 
-1. First, list 3 specific visual observations.
-2. Second, evaluate if each observation is a compression artifact or a generation artifact.
-3. Third, determine your confidence score based on the *quantity* and *severity* of distinct artifacts.
+ANALYSIS PROCESS:
+1. Examine each frame carefully for the indicators above
+2. Count REAL indicators vs FAKE indicators
+3. If REAL indicators > FAKE indicators by 2+, set is_real=true with high confidence
+4. If FAKE indicators > REAL indicators by 2+, set is_suspicious=true with high confidence
+5. If indicators are balanced, be uncertain but explain why
 
 Respond ONLY with a valid JSON object (no markdown, no code blocks) in this exact format:
 {
-    "reasoning": "Step-by-step analysis of key frames...",
-    "is_suspicious": true or false,
-    "confidence": 0.0 to 1.0,
-    "findings": ["finding 1", "finding 2", ...],
-    "artifact_types": ["type1", "type2", ...],
-    "assessment": "One sentence summary"
+    "reasoning": "Brief step-by-step analysis: [your specific observations from the frames]",
+    "is_real": true/false/null,
+    "is_suspicious": true/false/null,
+    "confidence": 0.0-1.0,
+    "real_indicators": ["specific indicator 1", "specific indicator 2", ...],
+    "fake_indicators": ["specific indicator 1", "specific indicator 2", ...],
+    "findings": ["detailed finding 1", "detailed finding 2", ...],
+    "assessment": "One clear sentence: This video appears [REAL/FAKE/UNCERTAIN] because [specific reason]"
 }
 
-Be conservative: if unsure, indicate lower confidence. Real videos may have compression artifacts that look suspicious."""
+Be decisive and specific. If you see strong evidence of authenticity, set is_real=true with confidence > 0.7. If you see manipulation artifacts, set is_suspicious=true with confidence > 0.7."""
     
     def _parse_response(self, response_text: str) -> Dict:
         """Parse Gemini response into structured format"""
@@ -210,16 +225,22 @@ Be conservative: if unsure, indicate lower confidence. Real videos may have comp
             result = json.loads(text)
             
             # Ensure required fields exist
+            is_real = result.get("is_real", None)
             is_suspicious = result.get("is_suspicious", None)
             confidence = float(result.get("confidence", 0.5))
+            real_indicators = result.get("real_indicators", [])
+            fake_indicators = result.get("fake_indicators", [])
             findings = result.get("findings", [])
             artifact_types = result.get("artifact_types", [])
             assessment = result.get("assessment", "Analysis complete")
             
             return {
                 "available": True,
+                "is_real": is_real,
                 "is_suspicious": is_suspicious,
                 "confidence": round(confidence, 3),
+                "real_indicators": real_indicators,
+                "fake_indicators": fake_indicators,
                 "findings": findings,
                 "artifact_types": artifact_types,
                 "assessment": assessment,

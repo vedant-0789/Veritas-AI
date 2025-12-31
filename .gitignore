@@ -16,6 +16,9 @@ backend/.env
 .DS_Store
 Thumbs.db
 
+# Logs
+backend/logs/
+
 # VS Code
 .vscode/
 *.code-workspace

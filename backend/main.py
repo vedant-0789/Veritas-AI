@@ -9,24 +9,35 @@ import uuid
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
+# Import logger
+from modules.logger import logger
+
 # Import our detection modules
 from modules.rppg import RPPGAnalyzer
 from modules.gemini_analyzer import GeminiAnalyzer
+from modules.vision_analyzer import VisionAnalyzer
+from modules.temporal_analyzer import TemporalAnalyzer
+from modules.advanced_analyzer import AdvancedAnalyzer
 from modules.ensemble import EnsembleDecision
+
+# Import API components
+from api.metrics import router as metrics_router, record_analysis
+from api.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Veritas-AI API",
-    description="Deepfake Detection API using Bio-Guard (rPPG) and Physics-Guard (Gemini AI)",
-    version="1.0.0-mvp"
+    description="Deepfake Detection API using Bio-Guard (rPPG), Physics-Guard (Gemini AI), and Temporal Analysis",
+    version="1.1.0"
 )
 
 # Configure CORS for Chrome extension
@@ -41,7 +52,19 @@ app.add_middleware(
 # Initialize analyzers
 rppg_analyzer = RPPGAnalyzer()
 gemini_analyzer = GeminiAnalyzer()
+vision_analyzer = VisionAnalyzer()
+temporal_analyzer = TemporalAnalyzer()
+advanced_analyzer = AdvancedAnalyzer()
 ensemble = EnsembleDecision()
+
+# Add middleware
+app.add_middleware(SecurityHeadersMiddleware)
+# Rate limiting (60 requests per minute per IP)
+if os.getenv("ENABLE_RATE_LIMITING", "true").lower() == "true":
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
+
+# Include metrics router
+app.include_router(metrics_router)
 
 # Store for async task results (in-memory for MVP)
 task_results = {}
@@ -70,6 +93,9 @@ class AnalysisResult(BaseModel):
     confidence: Optional[float] = None
     bio_guard: Optional[dict] = None
     physics_guard: Optional[dict] = None
+    temporal_guard: Optional[dict] = None
+    advanced_guard: Optional[dict] = None
+    vision_guard: Optional[dict] = None
     evidence: Optional[List[str]] = None
     processing_time: Optional[float] = None
     timestamp: str
@@ -84,18 +110,36 @@ class HealthResponse(BaseModel):
 
 # ================== API Endpoints ==================
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unhandled errors"""
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": str(exc) if os.getenv("DEBUG", "false").lower() == "true" else "An error occurred"
+        }
+    )
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
-    return HealthResponse(
-        status="healthy",
-        version="1.0.0-mvp",
-        modules={
-            "rppg": "active",
-            "gemini": "active" if os.getenv("GEMINI_API_KEY") else "no_api_key",
-            "ensemble": "active"
-        }
-    )
+    try:
+        return HealthResponse(
+            status="healthy",
+            version="1.1.0",
+            modules={
+                "rppg": "active",
+                "gemini": "active" if os.getenv("GEMINI_API_KEY") else "no_api_key",
+                "temporal": "active",
+                "ensemble": "active"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Health check failed")
 
 
 @app.post("/api/analyze", response_model=AnalysisResult)
@@ -159,16 +203,21 @@ async def analyze_video_sync(request: AnalyzeRequest):
     Synchronous analysis - waits for result before responding.
     Use for smaller frame sets or when immediate results needed.
     """
+    logger.info(f"Analysis request received: {len(request.frames)} frames")
+    
     if not request.consent_given:
+        logger.warning("Analysis rejected: No biometric consent")
         raise HTTPException(status_code=400, detail="Biometric consent required")
     
     if not request.frames or len(request.frames) < 5:
+        logger.warning(f"Analysis rejected: Insufficient frames ({len(request.frames) if request.frames else 0})")
         raise HTTPException(status_code=400, detail="Minimum 5 frames required for analysis")
     
     task_id = str(uuid.uuid4())[:8]
     start_time = datetime.now()
     
     try:
+        logger.info(f"Starting analysis task {task_id}")
         # Decode frames
         decoded_frames = []
         for frame in request.frames:
@@ -187,10 +236,24 @@ async def analyze_video_sync(request: AnalyzeRequest):
         # Run Physics-Guard (Gemini) analysis
         physics_result = gemini_analyzer.analyze(decoded_frames)
         
+        # Run Temporal analysis
+        temporal_result = temporal_analyzer.analyze(decoded_frames)
+        
+        # Run Advanced analysis
+        advanced_result = advanced_analyzer.analyze(decoded_frames)
+        
+        # Optional: Vision API analysis (if available)
+        vision_result = vision_analyzer.analyze(decoded_frames)
+        
         # Ensemble decision
-        final_result = ensemble.make_decision(bio_result, physics_result)
+        final_result = ensemble.make_decision(bio_result, physics_result, vision_result, temporal_result)
         
         processing_time = (datetime.now() - start_time).total_seconds()
+        
+        # Record metrics
+        record_analysis(final_result['verdict'], processing_time, success=True)
+        
+        logger.info(f"Analysis completed: {task_id} - Verdict: {final_result['verdict']} (Confidence: {final_result['confidence']:.2f}) in {processing_time:.2f}s")
         
         return AnalysisResult(
             task_id=task_id,
@@ -199,6 +262,9 @@ async def analyze_video_sync(request: AnalyzeRequest):
             confidence=final_result["confidence"],
             bio_guard=bio_result,
             physics_guard=physics_result,
+            temporal_guard=temporal_result,
+            advanced_guard=advanced_result,
+            vision_guard=vision_result,
             evidence=final_result["evidence"],
             processing_time=processing_time,
             timestamp=datetime.now().isoformat()
@@ -207,6 +273,8 @@ async def analyze_video_sync(request: AnalyzeRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Analysis failed for task {task_id}: {str(e)}", exc_info=True)
+        record_analysis("ERROR", 0, success=False)
         return AnalysisResult(
             task_id=task_id,
             status="error",
@@ -248,10 +316,22 @@ async def process_analysis(task_id: str, request: AnalyzeRequest):
         # Run Physics-Guard (Gemini) analysis
         physics_result = gemini_analyzer.analyze(decoded_frames)
         
+        # Run Temporal analysis
+        temporal_result = temporal_analyzer.analyze(decoded_frames)
+        
+        # Run Advanced analysis
+        advanced_result = advanced_analyzer.analyze(decoded_frames)
+        
+        # Optional: Vision API analysis (if available)
+        vision_result = vision_analyzer.analyze(decoded_frames)
+        
         # Ensemble decision
-        final_result = ensemble.make_decision(bio_result, physics_result)
+        final_result = ensemble.make_decision(bio_result, physics_result, vision_result, temporal_result)
         
         processing_time = (datetime.now() - start_time).total_seconds()
+        
+        # Record metrics
+        record_analysis(final_result['verdict'], processing_time, success=True)
         
         # Store result
         task_results[task_id] = {
@@ -260,6 +340,9 @@ async def process_analysis(task_id: str, request: AnalyzeRequest):
             "confidence": final_result["confidence"],
             "bio_guard": bio_result,
             "physics_guard": physics_result,
+            "temporal_guard": temporal_result,
+            "advanced_guard": advanced_result,
+            "vision_guard": vision_result,
             "evidence": final_result["evidence"],
             "processing_time": processing_time,
             "timestamp": datetime.now().isoformat()
@@ -282,7 +365,8 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     debug = os.getenv("DEBUG", "true").lower() == "true"
     
-    print(f"🚀 Starting Veritas-AI Backend on {host}:{port}")
-    print(f"📚 API Docs: http://localhost:{port}/docs")
+    logger.info(f"🚀 Starting Veritas-AI Backend on {host}:{port}")
+    logger.info(f"📚 API Docs: http://localhost:{port}/docs")
+    logger.info(f"🔍 Debug mode: {debug}")
     
-    uvicorn.run("main:app", host=host, port=port, reload=debug)
+    uvicorn.run("main:app", host=host, port=port, reload=debug, log_config=None)

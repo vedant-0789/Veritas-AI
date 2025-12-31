@@ -361,7 +361,13 @@ class VeritasInjector {
     const title = isReal ? 'LIKELY REAL' : (isFake ? 'LIKELY FAKE' : 'UNCERTAIN');
     const confidence = Math.round((result.confidence || 0) * 100);
 
-    const evidenceList = (result.evidence || []).map((e: string) => `<li style="margin-bottom:6px; opacity:0.9;">${e}</li>`).join('');
+    // Enhanced evidence display with better formatting
+    const evidenceList = (result.evidence || []).map((e: string) => {
+      const isPositive = e.includes('✅') || e.includes('🔬') || e.includes('⏱️');
+      const isNegative = e.includes('❌') || e.includes('🚨') || e.includes('⚠️');
+      const color = isPositive ? '#22c55e' : (isNegative ? '#ef4444' : '#e2e8f0');
+      return `<li style="margin-bottom:8px; opacity:0.95; color:${color}; font-size:13px; line-height:1.4;">${e}</li>`;
+    }).join('');
 
     this.overlay = document.createElement('div');
     this.overlay.className = 'veritas-glass veritas-fade-in';
@@ -379,11 +385,26 @@ class VeritasInjector {
       pointerEvents: 'auto'
     });
 
+    // Enhanced confidence display with color coding
+    const confidenceColor = confidence >= 85 ? '#22c55e' : (confidence >= 70 ? '#3b82f6' : (confidence >= 50 ? '#eab308' : '#ef4444'));
+    const confidenceLabel = confidence >= 90 ? 'VERY HIGH' : (confidence >= 80 ? 'HIGH' : (confidence >= 70 ? 'MODERATE' : (confidence >= 50 ? 'LOW' : 'VERY LOW')));
+    
     this.overlay.innerHTML = `
-      <div style="padding: 24px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-         <div style="display:flex; justify-content:space-between; align-items:center;">
-           <h2 style="margin:0; font-size: 24px; font-weight: 800; color: ${color}; letter-spacing: -0.5px;">${title}</h2>
-           <div style="font-family: monospace; font-size: 14px; opacity: 0.7;">CONFIDENCE: ${confidence}%</div>
+      <div style="padding: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); background: linear-gradient(135deg, ${color}15 0%, transparent 100%);">
+         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+           <h2 style="margin:0; font-size: 28px; font-weight: 900; color: ${color}; letter-spacing: -0.5px; text-shadow: 0 2px 10px ${color}40;">${title}</h2>
+         </div>
+         <div style="display: flex; align-items: center; gap: 16px;">
+           <div style="flex: 1;">
+             <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 4px;">Confidence Level</div>
+             <div style="display: flex; align-items: center; gap: 8px;">
+               <div style="flex: 1; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+                 <div style="height: 100%; width: ${confidence}%; background: linear-gradient(90deg, ${confidenceColor} 0%, ${confidenceColor}dd 100%); border-radius: 4px; transition: width 0.5s;"></div>
+               </div>
+               <div style="font-family: monospace; font-size: 18px; font-weight: 700; color: ${confidenceColor}; min-width: 50px; text-align: right;">${confidence}%</div>
+             </div>
+             <div style="font-size: 10px; color: ${confidenceColor}; margin-top: 4px; font-weight: 600;">${confidenceLabel} CONFIDENCE</div>
+           </div>
          </div>
       </div>
       
@@ -393,20 +414,39 @@ class VeritasInjector {
           ${evidenceList}
         </ul>
         
-        <div style="margin-top: 20px; display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-           <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px;">
-             <div style="font-size:11px; opacity:0.5; margin-bottom:4px;">BIO-GUARD</div>
-             <div style="font-weight:600; color:${result.bio_guard?.pulse_detected ? '#22c55e' : '#94a3b8'}">
-               ${result.bio_guard?.pulse_detected ? `${Math.round(result.bio_guard.bpm)} BPM` : 'No Pulse'}
+        <div style="margin-top: 20px; display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
+           <div style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.2);">
+             <div style="font-size:10px; text-transform: uppercase; letter-spacing: 1px; opacity:0.6; margin-bottom:6px; font-weight: 600;">BIO-GUARD</div>
+             <div style="font-weight:700; font-size:16px; color:${result.bio_guard?.pulse_detected ? '#22c55e' : '#94a3b8'}; margin-bottom:4px;">
+               ${result.bio_guard?.pulse_detected ? `❤️ ${Math.round(result.bio_guard.bpm)} BPM` : '❌ No Pulse'}
              </div>
+             ${result.bio_guard?.snr ? `<div style="font-size:11px; opacity:0.7; color:${result.bio_guard.snr > 5 ? '#22c55e' : (result.bio_guard.snr > 2 ? '#eab308' : '#ef4444')};">SNR: ${result.bio_guard.snr.toFixed(1)}</div>` : ''}
+             ${result.bio_guard?.confidence ? `<div style="font-size:10px; opacity:0.6; margin-top:2px;">Conf: ${Math.round(result.bio_guard.confidence * 100)}%</div>` : ''}
            </div>
-           <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px;">
-             <div style="font-size:11px; opacity:0.5; margin-bottom:4px;">PHYSICS-GUARD</div>
-             <div style="font-weight:600; color:${result.physics_guard?.is_suspicious ? '#ef4444' : '#22c55e'}">
-               ${result.physics_guard?.is_suspicious ? 'Suspicious' : 'Clear'}
+           <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.2);">
+             <div style="font-size:10px; text-transform: uppercase; letter-spacing: 1px; opacity:0.6; margin-bottom:6px; font-weight: 600;">PHYSICS-GUARD</div>
+             <div style="font-weight:700; font-size:16px; color:${result.physics_guard?.is_suspicious ? '#ef4444' : (result.physics_guard?.is_real ? '#22c55e' : '#94a3b8')}; margin-bottom:4px;">
+               ${result.physics_guard?.is_real ? '✅ Authentic' : (result.physics_guard?.is_suspicious ? '❌ Suspicious' : '⚠️ Uncertain')}
              </div>
+             ${result.physics_guard?.confidence ? `<div style="font-size:11px; opacity:0.7;">Conf: ${Math.round(result.physics_guard.confidence * 100)}%</div>` : ''}
            </div>
+           ${result.temporal_guard?.available ? `
+           <div style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.1) 0%, rgba(236, 72, 153, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(236, 72, 153, 0.2);">
+             <div style="font-size:10px; text-transform: uppercase; letter-spacing: 1px; opacity:0.6; margin-bottom:6px; font-weight: 600;">TEMPORAL-GUARD</div>
+             <div style="font-weight:700; font-size:16px; color:${result.temporal_guard.temporal_consistency > 0.7 ? '#22c55e' : (result.temporal_guard.temporal_consistency < 0.4 ? '#ef4444' : '#eab308')}; margin-bottom:4px;">
+               ${result.temporal_guard.temporal_consistency > 0.7 ? '✅ Consistent' : (result.temporal_guard.temporal_consistency < 0.4 ? '❌ Inconsistent' : '⚠️ Moderate')}
+             </div>
+             <div style="font-size:11px; opacity:0.7;">Score: ${(result.temporal_guard.temporal_consistency * 100).toFixed(0)}%</div>
+           </div>
+           ` : ''}
         </div>
+        
+        ${result.summary ? `
+        <div style="margin-top: 16px; padding: 12px; background: rgba(56, 189, 248, 0.1); border-left: 3px solid #38bdf8; border-radius: 8px;">
+          <div style="font-size:12px; font-weight:600; margin-bottom:6px; color:#38bdf8;">SUMMARY</div>
+          <div style="font-size:13px; color:#e2e8f0; line-height:1.5;">${result.summary}</div>
+        </div>
+        ` : ''}
       </div>
       
       <div style="padding: 16px; background: rgba(0,0,0,0.4); text-align:center;">
