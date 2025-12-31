@@ -7,44 +7,74 @@
 
 > **The Digital Bio-Guard: Real-time Deepfake Detection using Biometric Signal Analysis (rPPG) and Multimodal AI.**
 
-![Veritas-AI Banner](docs/assets/banner_minimal.png)
+![Veritas-AI Banner](docs/assets/banner_dark.png)
 
 Veritas-AI is an open-source browser extension designed to restore trust in digital media. It verifies video authenticity by detecting **rPPG (Remote Photoplethysmography)** signals — the subtle, invisible pulse-induced skin color changes that generative AI and deepfakes currently cannot replicate faithfully.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Detailed System Architecture
 
-Veritas-AI uses a decoupled client-server architecture designed for high-performance video analysis without compromising browser stability.
+Veritas-AI operates on a multi-layered forensic architecture that combines biological signal processing with advanced visual analysis.
 
-1.  **Frontend (Extension)**: A React-based Chrome extension that injects into YouTube pages. It handles frame capture, local state management, and the user interface.
-2.  **Communication Layer**: Secure REST API utilizing FastAPI for asynchronous processing.
-3.  **Backend (Analysis Engine)**: A Python-powered engine that runs multiple forensic modules in parallel to provide a comprehensive authenticity score.
+### 1. Frontend Intelligence (Chrome Extension)
+The client-side layer is responsible for non-intrusive monitoring and data acquisition:
+- **Injection Engine**: Uses Content Scripts to inject the "VERITAS" control seal into YouTube's shadow DOM.
+- **Dynamic Frame Capture**: Leverages the `CanvasCapture` API to extract high-resolution frame sequences at 30 FPS without interrupting video playback.
+- **Glassmorphic UI**: Built with React and Tailwind CSS, providing a high-fidelity dashboard for results that feels native to the browser.
+
+### 2. High-Performance API (FastAPI)
+The bridge between the browser and the detection engine:
+- **Asynchronous Processing**: Handles heavy computation tasks using `BackgroundTasks`, allowing for real-time progress updates.
+- **Rate-Limiting & Security**: Implements IP-based rate limiting and secure CORS policies to protect the analysis engine.
+- **Structured Logging**: Every analysis generates a forensic trace for transparency and debugging.
+
+### 3. Forensic Analysis Engine (The Core)
+The engine runs five specialized "Guards" in parallel:
+
+- **❤️ Bio-Guard (rPPG & Blinks)**: 
+    - Extracts the RGB signal from facial regions of interest (ROI).
+    - Applies independent component analysis (ICA) to isolate the pulse signal from ambient light noise.
+    - Validates "proof of life" through eye-blink frequency analysis.
+- **🧠 Physics-Guard (Gemini 2.0 Oracle)**: 
+    - Sends keyframes to Google Gemini 2.0 Flash to detect visual anomalies like "phantom teeth," lighting inconsistencies, and boundary blending artifacts.
+- **🔄 Temporal-Guard**: 
+    - Analyzes frame-to-frame coherence to identify "jittering" or pixel-misalignments common in generative models.
+- **👄 Advanced-Guard**: 
+    - Performs lip-sync verification and head-movement micro-behavior analysis.
+- **⚖️ Ensemble Layer**: 
+    - Aggregates findings using a dynamic weighting system, where high-confidence biological signals (pulse) carry higher weight than visual artifacts.
 
 ```mermaid
 graph TD
-    A[YouTube Video] -->|Capture Frames| B[Chrome Extension]
-    B -->|Base64 Payload| C[FastAPI Backend]
-    subgraph Analysis Engine
-        C --> D[Bio-Guard: rPPG & Blinks]
-        C --> E[Physics-Guard: Gemini Vision]
-        C --> F[Temporal-Guard: Consistency]
-        C --> G[Advanced-Guard: LipSync/Behavior]
+    subgraph Browser_Environment
+        A[YouTube Player] -->|Frame Extraction| B[Content Script]
+        B -->|UI Control| I[Glassmorphic Dashboard]
     end
-    D & E & F & G --> H[Ensemble Decision Logic]
-    H -->|Verdict & Evidence| B
-    B -->|Overlay| I[User Interface]
+
+    subgraph Backend_Infrastructure
+        B -->|Async Payload| C[FastAPI Gateway]
+        subgraph Analysis_Core
+            C --> D1[rPPG Signal Processor]
+            C --> D2[MediaPipe Landmark Tracker]
+            C --> D3[Gemini Vision Analyzer]
+            C --> D4[Temporal Consistency Engine]
+        end
+        D1 & D2 & D3 & D4 --> E[Multi-Modal Fusion Layer]
+        E -->|Final Decision Post| C
+    end
+
+    C -->|Real-time Verdict| I
 ```
 
 ---
 
 ## 🌟 Key Features
 
--   **❤️ Bio-Guard (rPPG)**: Advanced pixel-level analysis to extract human heartbeats. Since AI-generated faces lack a circulatory system, this serves as a definitive "proof of life."
--   **👁️ Natural Behavior Detection**: Analyzes eye blink patterns and micro-expressions that are often absent or unnatural in synthetic media.
--   **🧠 Physics-Guard (Gemini AI)**: Leverages Google's Gemini 2.0 Oracle to detect non-human artifacts, inconsistent lighting, and boundary blending errors.
--   **⚡ Seamless Integration**: Operates as a lightweight overlay on platforms like YouTube, providing real-time authenticity scores.
--   **🔒 Privacy-Centric**: Designed for local processing. Ephemeral analysis ensures that your viewing data remains private.
+-   **❤️ Definitive Proof of Life**: Uses rPPG to detect actual human heartbeats—something AI cannot yet replicate.
+-   **👁️ Behavioral Analysis**: Detects natural human rhythms, from blinks to micro-expressions.
+-   **🧠 Multimodal Verification**: Combines classical computer vision with cutting-edge LLM-based vision models.
+-   **🔒 Privacy by Design**: All frame data is processed ephemerally; no personal video data is permanently stored.
 
 ---
 
@@ -52,11 +82,11 @@ graph TD
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Shadcn/UI |
+| **Extension** | React 18, TypeScript, Vite, Tailwind CSS |
 | **Backend** | Python 3.11+, FastAPI, Uvicorn |
-| **CV / ML** | OpenCV, MediaPipe, NumPy, SciPy |
-| **LLM / Vision** | Google Gemini 2.0 Flash (Vision API) |
-| **DevOps** | Docker, Docker Compose, GitHub Actions |
+| **Forensics** | OpenCV 4.x, MediaPipe, NumPy, SciPy |
+| **Logic** | Google Gemini 2.0 Flash, Pydantic |
+| **Deploy** | Docker, Docker Compose |
 
 ---
 
@@ -65,64 +95,42 @@ graph TD
 ```text
 Veritas-AI/
 ├── backend/                # Analysis engine and API
-│   ├── api/                # API endpoints and middleware
-│   ├── modules/            # Forensic analysis modules (rPPG, Gemini, etc.)
-│   ├── tests/              # Backend testing suite
-│   └── main.py             # Server entry point
-├── extension/              # Chrome extension source
-│   ├── content/            # Injected scripts and frame capture
-│   ├── popup/              # Extension control panel UI
-│   ├── background/         # Service worker logic
-│   └── public/             # Static assets
-├── docs/                   # Detailed documentation and project assets
-└── README.md               # Home base
+│   ├── api/                # Endpoints, middleware, and metrics
+│   ├── modules/            # The 5 Forensic Guards (rPPG, Gemini, etc.)
+│   ├── tests/              # Comprehensive test suite
+│   └── main.py             # FastAPI entry point
+├── extension/              # React-based Chrome extension
+│   ├── content/            # Shadow DOM injection and frame capture
+│   ├── popup/              # Glassmorphic control UI
+│   └── background/         # Service worker for API comms
+├── docs/                   # Documentation and project assets
+└── README.md               # Project Home
 ```
 
 ---
 
-## 🔄 User Flows
+## ⚠️ Known Limitations & Roadmap
 
-### 1. Verification Flow
-1.  **Detection**: The extension automatically identifies video players on supported sites (e.g., YouTube).
-2.  **Trigger**: The user clicks the "VERITAS" seal on the video player.
-3.  **Analysis**: The extension captures a sequence of frames and sends them to the backend.
-4.  **Feedback**: A progress bar indicates status (Capturing -> Analyzing -> Verdict).
-5.  **Result**: A glassmorphic overlay appears with the authenticity score and a list of forensic evidence.
+### Current Version (v1.0)
+- Optimized for single-person videos.
+- Requires 720p+ resolution for accurate rPPG extraction.
 
----
-
-## ⚠️ Known Limitations & Future Improvements
-
-### Current Limitations
--   **Hardware Dependent**: rPPG accuracy depends on video quality (720p+ recommended) and facial lighting.
--   **Single Face**: The current version is optimized for a single dominant face in the frame.
--   **Latency**: Full multimodal analysis takes 5–15 seconds depending on hardware.
-
-### Roadmap
--   [ ] **Wasm Integration**: Moving the rPPG engine to WebAssembly for 100% offline detection.
--   [ ] **Voice Clone Detection**: Adding audio analysis to detect synthetic speech patterns.
--   [ ] **Multi-Face Support**: Detecting authenticity for multiple people in debates or interviews.
--   [ ] **Real-time Streaming**: Optimizing for live stream verification.
+### Future Roadmap
+- [ ] **Edge Processing**: Porting the rPPG engine to **WebAssembly (Wasm)** for zero-latency local detection.
+- [ ] **Voiceprint Guard**: Integrating audio analysis for voice clone detection.
+- [ ] **Multi-Target Analysis**: Parallel detection for multiple people in a single frame.
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Whether it's a new detection module, UI improvements, or bug fixes.
-
-1.  **Fork** the repo.
-2.  **Create** your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  **Commit** your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  **Push** to the branch (`git push origin feature/AmazingFeature`).
-5.  **Open** a Pull Request.
-
-Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+We welcome contributions! Please refer to our [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to set up your environment and submit a Pull Request.
 
 ---
 
 ## 🚀 Getting Started
 
-Discover how to set up Veritas-AI in minutes in our [**Getting Started Guide**](docs/GETTING_STARTED.md).
+Ready to install? Follow our [**Getting Started Guide**](docs/GETTING_STARTED.md) to set up the backend and extension in under 5 minutes.
 
 ---
 
