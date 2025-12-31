@@ -115,7 +115,8 @@ class RPPGAnalyzer:
             bpm, snr, confidence = self._analyze_frequency(filtered_signal)
             
             # Determine if pulse is detected
-            pulse_detected = confidence > 0.5 and snr > 3.0
+            # Increased threshold to 4.0 to reduce false positives from noise/compression
+            pulse_detected = confidence > 0.5 and snr > 4.0
             
             # Generate assessment
             if pulse_detected:

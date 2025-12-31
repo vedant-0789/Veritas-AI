@@ -15,9 +15,9 @@ class EnsembleDecision:
     def __init__(self):
         """Initialize with default weights"""
         # Bio-Guard (rPPG) is primary - biological signals are hard to fake
-        self.bio_weight = 0.6
-        # Physics-Guard (Gemini AI) is secondary - provides context
-        self.physics_weight = 0.4
+        # Balanced approach: 50/50 baseline
+        self.bio_weight = 0.5
+        self.physics_weight = 0.5
         
         # Thresholds
         self.high_confidence_threshold = 0.75
@@ -59,8 +59,13 @@ class EnsembleDecision:
             bio_score = bio_confidence * 0.8  # Weak signal
             evidence.append(f"⚠️ Weak biological signal detected: {int(bpm) if bpm else '?'} BPM")
         else:
-            bio_score = 1 - max(bio_confidence, 0.3)  # No pulse = likely fake
-            evidence.append("❌ No biological pulse detected")
+            # No pulse detected.
+            # Reduce bio weight significantly so AI can carry the decision
+            # Otherwise we get stuck in "Uncertain"
+            bio_score = 0.5 
+            self.bio_weight = 0.2
+            self.physics_weight = 0.8
+            evidence.append("❌ No biological pulse detected (neutral)")
         
         # Physics score: low if suspicious artifacts found
         if physics_available:
@@ -101,8 +106,15 @@ class EnsembleDecision:
                 evidence.insert(0, "🚨 Multiple indicators of synthetic content")
         
         # Case 3: Gemini strongly suspicious + weak bio = likely fake
-        if is_suspicious and physics_confidence > 0.8 and bio_confidence < 0.5:
-            final_score = min(final_score, 0.3)
+        if is_suspicious and physics_confidence > 0.8:
+            # If AI is very sure it's fake, we trust it even if bio is ambiguous
+            final_score = min(final_score, 0.25)
+            if "AI strongly indicates manipulation" not in str(evidence):
+                evidence.insert(0, "🤖 AI strongly indicates manipulation")
+
+        # Case 4: Gemini strongly real + weak bio = likely real (e.g. good animation but real person)
+        if is_suspicious is False and physics_confidence > 0.9:
+             final_score = max(final_score, 0.8)
         
         # Determine verdict
         if final_score >= self.high_confidence_threshold:
@@ -117,8 +129,8 @@ class EnsembleDecision:
         
         # Calculate final confidence in the verdict
         if verdict == "UNCERTAIN":
-            # Confidence in uncertainty is based on how close to middle
-            verdict_confidence = 1 - abs(final_score - 0.5) * 2
+            # Confidence in uncertainty should be low to reflect the ambiguity
+            verdict_confidence = 0.5 - abs(final_score - 0.5)
         else:
             # Confidence is based on how far from threshold
             if verdict == "LIKELY_REAL":

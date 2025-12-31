@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Production
+extension/dist/
+
+# Env & Secrets
+.env
+.env.local
+backend/.env
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+*.code-workspace

@@ -33,7 +33,7 @@ class GeminiAnalyzer:
         if GEMINI_AVAILABLE and self.api_key:
             try:
                 genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel('gemini-1.5-flash')
+                self.model = genai.GenerativeModel('gemini-2.0-flash')
                 print("✅ Gemini AI initialized successfully")
             except Exception as e:
                 print(f"⚠️ Failed to initialize Gemini: {e}")
@@ -164,11 +164,25 @@ Analyze these video frames carefully for signs of synthetic or manipulated conte
    - Hair moving unnaturally
    - Clothing/jewelry inconsistencies
 
-6. **Compression Artifacts vs. Deepfake Artifacts**:
+6. **AI Avatar Indicators**:
+   - Perfect symmetry in facial features
+   - Lack of micro-expressions or "dead eyes"
+   - Lip-sync issues (mouth moving but jaw/cheeks static)
+   - Head movement that feels robotic or divorced from body movement
+   - Static background with no depth of field changes
+
+7. **Compression Artifacts vs. Deepfake Artifacts**:
    - Distinguish between normal video compression and AI manipulation
+
+**CRITICAL INSTRUCTION**: 
+You must think step-by-step before deciding. 
+1. First, list 3 specific visual observations.
+2. Second, evaluate if each observation is a compression artifact or a generation artifact.
+3. Third, determine your confidence score based on the *quantity* and *severity* of distinct artifacts.
 
 Respond ONLY with a valid JSON object (no markdown, no code blocks) in this exact format:
 {
+    "reasoning": "Step-by-step analysis of key frames...",
     "is_suspicious": true or false,
     "confidence": 0.0 to 1.0,
     "findings": ["finding 1", "finding 2", ...],
@@ -210,7 +224,7 @@ Be conservative: if unsure, indicate lower confidence. Real videos may have comp
                 "artifact_types": artifact_types,
                 "assessment": assessment,
                 "details": {
-                    "model": "gemini-1.5-flash",
+                    "model": "gemini-2.0-flash",
                     "frames_analyzed": 3
                 }
             }

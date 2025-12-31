@@ -285,4 +285,4 @@ if __name__ == "__main__":
     print(f"🚀 Starting Veritas-AI Backend on {host}:{port}")
     print(f"📚 API Docs: http://localhost:{port}/docs")
     
-    uvicorn.run(app, host=host, port=port, reload=debug)
+    uvicorn.run("main:app", host=host, port=port, reload=debug)
