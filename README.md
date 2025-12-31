@@ -13,7 +13,7 @@ Veritas-AI is an open-source browser extension designed to restore trust in digi
 
 ---
 
-## �️ System Architecture
+## 🏗️ System Architecture
 
 Veritas-AI uses a decoupled client-server architecture designed for high-performance video analysis without compromising browser stability.
 
@@ -60,7 +60,7 @@ graph TD
 
 ---
 
-## � Repository Structure
+## 📂 Repository Structure
 
 ```text
 Veritas-AI/
@@ -80,7 +80,7 @@ Veritas-AI/
 
 ---
 
-## � User Flows
+## 🔄 User Flows
 
 ### 1. Verification Flow
 1.  **Detection**: The extension automatically identifies video players on supported sites (e.g., YouTube).
