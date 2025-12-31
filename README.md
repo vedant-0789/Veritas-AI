@@ -66,10 +66,10 @@ Load the `extension/dist` folder into Chrome via `chrome://extensions/`.
 
 We are committed to making Veritas-AI the industry standard for consumer-grade deepfake detection. 
 
-- [ ] **Mobile Support**: Extending the detection engine to mobile browsers and apps.
-- [ ] **Multi-Face Analysis**: Parallel rPPG extraction for group videos and debates.
-- [ ] **Edge Processing**: Moving the entire rPPG engine to WebAssembly (Wasm) for 100% local analysis.
-- [ ] **Audio Analysis**: Integrating voice clones detection for multimodal verification.
+-  **Mobile Support**: Extending the detection engine to mobile browsers and apps.
+-  **Multi-Face Analysis**: Parallel rPPG extraction for group videos and debates.
+-  **Edge Processing**: Moving the entire rPPG engine to WebAssembly (Wasm) for 100% local analysis.
+-  **Audio Analysis**: Integrating voice clones detection for multimodal verification.
 
 ## 🤝 Contributing
 
