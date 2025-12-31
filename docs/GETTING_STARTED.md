@@ -1,4 +1,4 @@
-# Veritas-AI Quick Start Guide
+# Veritas-AI Getting Started Guide
 
 Get Veritas-AI running in 5 minutes!
 
@@ -82,9 +82,9 @@ npm run build
 
 ## Next Steps
 
-- Read `DEPLOYMENT.md` for production deployment
-- Check `IMPROVEMENTS_SUMMARY.md` for all features
-- Review API docs at http://localhost:8000/docs
+- Read [Deployment Guide](DEPLOYMENT.md) for production deployment.
+- Check [Technical Enhancements](ENHANCEMENTS.md) for all features.
+- Review API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ## Support
 

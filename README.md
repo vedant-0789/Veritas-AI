@@ -1,94 +1,88 @@
 # Veritas-AI 🛡️
 
-> **Real-time Deepfake Detection using Biometric Signal Analysis (rPPG) and Multimodal AI.**
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Node.js 18+](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
+[![Chrome Extension](https://img.shields.io/badge/platform-Chrome-orange.svg)](https://developer.chrome.com/docs/extensions/)
+
+> **The Digital Bio-Guard: Real-time Deepfake Detection using Biometric Signal Analysis (rPPG) and Multimodal AI.**
 
 ![Veritas-AI Banner](docs/assets/banner.png)
 
-Veritas-AI is a Chrome Extension that acts as a digital "Bio-Guard", verifying video authenticity by detecting the subtle, invisible physiological signals of life (hair-color changes due to blood flow) that generative AI currently fails to replicate.
+Veritas-AI is an open-source browser extension designed to restore trust in digital media. It verifies video authenticity by detecting **rPPG (Remote Photoplethysmography)** signals—the subtle, invisible pulse-induced skin color changes that generative AI and deepfakes currently cannot replicate faithfully.
 
-## 🌟 Key Features
+---
 
-- **❤️ Bio-Guard (rPPG)**: Detects human pulse signals from video pixels (Remote Photoplethysmography). Deepfakes don't have a heartbeat.
-- **🧠 Physics-Guard (Gemini AI)**: Analyzes scene lighting, reflections, and boundary artifacts using Google's Gemini 2.0 Flash.
-- **⚡ Real-time Analysis**: In-browser analysis with instant feedback directly on the YouTube player.
-- **🔒 Privacy First**: Analysis happens locally or via secure ephemeral API calls; no video data is stored.
-- **✨ Glassmorphic UI**: A premium, trustworthy user interface designed for transparency.
+## 🌟 Key Pillars
+
+- **❤️ Bio-Guard (rPPG)**: Advanced pixel-level analysis to extract human heartbeats. Since AI-generated faces lack a circulatory system, this serves as a definitive "proof of life."
+- **🧠 Physics-Guard (Gemini AI)**: Leverages Google's Gemini 2.0 Flash to detect non-human artifacts, inconsistent lighting, and boundary blending errors.
+- **⚡ Seamless Integration**: Operates as a lightweight overlay on platforms like YouTube, providing real-time authenticity scores.
+- **🔒 Privacy-Centric**: Designed for local processing. Ephemeral analysis ensures that your viewing data remains private.
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS (Chrome Extension)
-- **Backend**: Python, FastAPI, OpenCV, NumPy, SciPy
-- **AI Core**: MediaPipe (Face Mesh), Google Gemini 2.0 Flash
-- **Communication**: REST API (Localhost)
-- **Monitoring**: Real-time logging & forensic reporting
+*   **Frontend**: React 18, TypeScript, Vite, Tailwind CSS (Glassmorphic Design)
+*   **Backend**: FastAPI, OpenCV (Signal Processing), NumPy, SciPy
+*   **AI Engine**: MediaPipe (Facial Mesh Stabilization), Google Gemini 2.0 Oracle
+*   **Architecture**: Decoupled Client-Server architecture for high-performance video frame analysis.
 
-## 📚 Documentation
+## 📚 Technical Documentation
 
-Detailed documentation for various aspects of the project:
+Explore our deep-dives into the system architecture and forensic methodology:
 
-- [Project Overview](docs/PROJECT_OVERVIEW.md) - Deep dive into the problem and solution.
-- [Final Features](docs/FINAL_FEATURES.md) - Comprehensive list of implemented features.
-- [Testing Guide](docs/TESTING_GUIDE.md) - Detailed instructions for verifying the system.
-- [Deployment Guide](docs/DEPLOYMENT.md) - How to deploy the backend and extension.
-- [Improvements Summary](docs/IMPROVEMENTS_SUMMARY.md) - List of recent technical upgrades.
-- [Fixes Applied](docs/FIXES_APPLIED.md) - History of bugs found and resolved.
-- [MediaPipe Fixes](docs/MEDIAPIPE_FIX.md) - Technical details on face-mesh stabilization.
+- [**Getting Started Guide**](docs/GETTING_STARTED.md) - Quick setup for developers.
+- [**System Architecture**](docs/PROJECT_OVERVIEW.md) - How Veritas-AI works under the hood.
+- [**Forensic Capabilities**](docs/FEATURES.md) - Deep dive into the detection modules.
+- [**Usage Guide**](docs/USAGE.md) - How to use the extension.
+- [**Deployment Guide**](docs/DEPLOYMENT.md) - Production and cloud setup.
+- [**Technical Enhancements**](docs/ENHANCEMENTS.md) - Optimization history and changelog.
 
-## 🚀 Getting Started
+---
 
-### Prerequisites
+## 🚀 Quick Start (Local Development)
 
-- Python 3.10+
-- Node.js 18+
-- Google Gemini API Key (Free)
-
-### 1. Setup Backend
-
+### 1. Backend Setup
 ```bash
 cd backend
 python -m venv venv
-.\venv\Scripts\activate
+source venv/bin/activate  # or .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
-
-# Create .env file with your GEMINI_API_KEY
-cp .env.example .env
-```
-
-### 2. Run Server
-
-```bash
+cp .env.example .env      # Add your GEMINI_API_KEY
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Build Extension
-
+### 2. Extension Setup
 ```bash
 cd extension
 npm install
 npm run build
 ```
+Load the `extension/dist` folder into Chrome via `chrome://extensions/`.
 
-### 4. Install in Chrome
+---
 
-1. Open `chrome://extensions/`
-2. Enable **Developer mode**
-3. Click **Load unpacked**
-4. Select `Veritas-AI/extension/dist`
+## 🗺️ Roadmap & Future Vision
 
-## 🧪 How to Test
+We are committed to making Veritas-AI the industry standard for consumer-grade deepfake detection. 
 
-1. Open any YouTube video containing a face.
-2. Look for the **VERITAS** button in the top-right of the video player.
-3. Click to authorize a scan.
-4. Wait ~5 seconds for **Bio-Guard** and **Physics-Guard** to complete.
-5. Review the authenticity score and forensic evidence.
+- [ ] **Mobile Support**: Extending the detection engine to mobile browsers and apps.
+- [ ] **Multi-Face Analysis**: Parallel rPPG extraction for group videos and debates.
+- [ ] **Edge Processing**: Moving the entire rPPG engine to WebAssembly (Wasm) for 100% local analysis.
+- [ ] **Audio Analysis**: Integrating voice clones detection for multimodal verification.
 
-## 🏆 Hackathon Notes
+## 🤝 Contributing
 
-- **Novelty**: First browser extension to combine rPPG (Heartbeat detection) with GenAI artifacts.
-- **Feasibility**: Runs on consumer hardware; rPPG is computationally lightweight.
-- **Impact**: Restores trust in digital media by proving what is _real_, not just detecting what is _fake_.
+We welcome contributions from the community! Whether you are a computer vision expert, a frontend wizard, or a cybersecurity enthusiast, there is a place for you here.
+
+Please read our [**Contributing Guidelines**](CONTRIBUTING.md) to get started.
 
 ## 📄 License
 
-MIT © 2025 Veritas-AI Team
+Veritas-AI is released under the **MIT License**. See [LICENSE](LICENSE) for more details.
+
+---
+
+<p align="center">
+  Built with ❤️ for a Truthful Digital Future.
+</p>

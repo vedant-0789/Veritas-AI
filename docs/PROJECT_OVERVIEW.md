@@ -180,7 +180,7 @@ Veritas-AI/
     └── ...
 ```
 
-## 🚀 Ready to Test!
+## 🚀 Ready to Go!
 
-Everything is built and ready. Follow the testing guide below!
+Everything is built and ready. Check the [Getting Started](../README.md#getting-started) guide to begin.
 

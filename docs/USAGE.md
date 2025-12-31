@@ -1,4 +1,4 @@
-# Quick Test Instructions
+# Veritas-AI Usage Guide
 
 ## 🚀 Fast Setup (3 Steps)
 
