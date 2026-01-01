@@ -37,7 +37,13 @@ export class ApiClient {
      */
     async healthCheck(): Promise<boolean> {
         try {
-            const response = await fetch(`${API_BASE_URL}/health`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+            const response = await fetch(`${API_BASE_URL}/health`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
             return response.ok;
         } catch (e) {
             return false;
@@ -45,34 +51,17 @@ export class ApiClient {
     }
 
     /**
-     * Submit video frames for analysis (Sync)
-     */
-    async analyzeVideoSync(request: AnalysisRequest): Promise<AnalysisResult> {
-        try {
-            const response = await fetch(`${API_BASE_URL}/analyze-sync`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(request),
-            });
-
-            if (!response.ok) {
-                throw new Error(`Analysis failed: ${response.statusText}`);
-            }
-
-            return await response.json();
-        } catch (e) {
-            console.error("API Error:", e);
-            throw e;
-        }
-    }
-
-    /**
-     * Submit video frames for analysis (Async)
+     * Submit video frames for analysis (Async - Recommended)
+     * Returns a task_id immediately.
      */
     async analyzeVideo(request: AnalysisRequest): Promise<AnalysisResult> {
         try {
+            // Fast fail if health check fails
+            const isHealthy = await this.healthCheck();
+            if (!isHealthy) {
+                throw new Error("Backend connection failed. Is the server running on port 8000?");
+            }
+
             const response = await fetch(`${API_BASE_URL}/analyze`, {
                 method: 'POST',
                 headers: {
@@ -82,18 +71,68 @@ export class ApiClient {
             });
 
             if (!response.ok) {
-                throw new Error(`Analysis failed: ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`Analysis request failed: ${response.status} - ${errorText}`);
             }
 
             return await response.json();
-        } catch (e) {
-            console.error("API Error:", e);
+        } catch (e: any) {
+            console.error("API Error (analyzeVideo):", e);
             throw e;
         }
     }
 
     /**
-     * Poll for analysis status
+     * Poll for analysis status until completion or timeout
+     */
+    async waitForAnalysis(taskId: string, timeoutMs: number = 60000): Promise<AnalysisResult> {
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < timeoutMs) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/status/${taskId}`);
+
+                if (!response.ok) {
+                    // If 404, maybe task expired or wrong ID
+                    if (response.status === 404) throw new Error("Task not found (expired?)");
+                    // Otherwise retry
+                    await new Promise(r => setTimeout(r, 1000));
+                    continue;
+                }
+
+                const result: AnalysisResult = await response.json();
+
+                if (result.status === 'completed') {
+                    return result;
+                } else if (result.status === 'error') {
+                    throw new Error(result.evidence?.[0] || "Unknown analysis error");
+                }
+
+                // Still processing, wait 1s
+                await new Promise(r => setTimeout(r, 1000));
+
+            } catch (e: any) {
+                // Network error or other fatal error -> retry a few times then fail?
+                // For now, if we get a specific error like "Task not found", we throw.
+                // Network errors we might want to retry a bit more gracefully.
+                console.warn("Polling error:", e);
+                if (e.message.includes("Task not found")) throw e;
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+
+        throw new Error("Analysis timed out");
+    }
+
+    /**
+     * Sync analysis (Deprecated/Legacy)
+     */
+    async analyzeVideoSync(request: AnalysisRequest): Promise<AnalysisResult> {
+        return this.analyzeVideo(request); // Redirect to async for safety
+    }
+
+    /**
+     * Poll for analysis status (Single check)
      */
     async getStatus(taskId: string): Promise<AnalysisResult> {
         try {

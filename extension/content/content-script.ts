@@ -6,7 +6,7 @@ interface VeritasVideoFrame {
   timestamp: number;
 }
 
-class VideoCapture {
+class VeritasCapture {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
 
@@ -148,14 +148,14 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-class VeritasInjector {
-  private videoCapture: VideoCapture;
+class VeritasCore {
+  private veritasCapture: VeritasCapture;
   private analyzing: boolean = false;
   private overlay: HTMLElement | null = null;
   private consentGiven: boolean = false; // In a real app, load from storage
 
   constructor() {
-    this.videoCapture = new VideoCapture();
+    this.veritasCapture = new VeritasCapture();
     this.init();
   }
 
@@ -319,7 +319,7 @@ class VeritasInjector {
       const statusEl = document.getElementById('veritas-scan-status');
       if (statusEl) statusEl.textContent = "Acquiring Target...";
 
-      const frames = await this.videoCapture.captureSequence(video, 15, 150);
+      const frames = await this.veritasCapture.captureSequence(video, 15, 150);
 
       if (frames.length === 0) throw new Error("Capture failed");
 
@@ -328,6 +328,7 @@ class VeritasInjector {
 
       // Analyze via Background Script
       const response = await new Promise<any>((resolve, reject) => {
+        console.log("Veritas-AI: Sending ANALYZE_REQUEST");
         chrome.runtime.sendMessage({
           type: 'ANALYZE_REQUEST',
           data: {
@@ -336,13 +337,17 @@ class VeritasInjector {
             consent_given: true,
             enable_gemini: options.enable_gemini
           }
-        }, (res) => {
+        }, (responseCallback) => {
+          console.log("Veritas-AI: Callback received", responseCallback, chrome.runtime.lastError);
           if (chrome.runtime.lastError) {
+            console.error("Veritas-AI: Runtime error", chrome.runtime.lastError);
             reject(chrome.runtime.lastError);
-          } else if (res.success) {
-            resolve(res.result);
+          } else if (responseCallback && responseCallback.success) {
+            resolve(responseCallback.result);
           } else {
-            reject(new Error(res.error || "Analysis failed"));
+            console.error("Veritas-AI: Success false", responseCallback);
+            // Simplify rejection to avoid potential 'Error' class shadowing issues
+            reject("Analysis failed: " + (responseCallback?.error || "Unknown"));
           }
         });
       });
@@ -607,12 +612,23 @@ class VeritasInjector {
   }
 }
 
-const injector = new VeritasInjector();
+const initVeritas = () => {
+  if ((window as any).veritasInitialized) return;
+  (window as any).veritasInitialized = true;
+  console.log("Veritas-AI: Initializing Core...");
+  const core = new VeritasCore();
 
-// Global listener
-chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-  if (request.type === 'START_SCAN') {
-    injector.handleExternalScan(request, sendResponse);
-    return true;
-  }
-});
+  // Global listener
+  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    if (request.type === 'START_SCAN') {
+      core.handleExternalScan(request, sendResponse);
+      return true;
+    }
+  });
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initVeritas);
+} else {
+  initVeritas();
+}

@@ -9,6 +9,20 @@ chrome.runtime.onInstalled.addListener(() => {
     console.log('Veritas-AI Extension installed');
 });
 
+const addToHistory = (result: any) => {
+    chrome.storage.local.get(['veritas_history'], (data) => {
+        const history = data.veritas_history || [];
+        const newItem = {
+            id: result.task_id || Date.now().toString(),
+            date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            verdict: result.verdict || 'UNKNOWN',
+            confidence: result.confidence || 0
+        };
+        const updated = [newItem, ...history].slice(0, 10);
+        chrome.storage.local.set({ veritas_history: updated });
+    });
+};
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'PING') {
         sendResponse({ status: 'pong' });
@@ -19,34 +33,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log("Background: Received analysis request", request.data.frames.length, "frames");
 
         // Return true to indicate async response
-        apiClient.analyzeVideoSync(request.data)
-            .then(result => {
-                console.log("Background: Analysis success", result);
-                addToHistory(result);
-                sendResponse({ success: true, result });
-            })
-            .catch(error => {
-                console.error("Background: Analysis failed", error);
-                sendResponse({ success: false, error: error.message });
-            });
+        (async () => {
+            try {
+                // 1. Submit for analysis (Async)
+                const initialResult = await apiClient.analyzeVideo(request.data);
+                console.log("Background: Task submitted, ID:", initialResult.task_id);
+
+                // 2. Poll for completion
+                const finalResult = await apiClient.waitForAnalysis(initialResult.task_id);
+                console.log("Background: Analysis success", finalResult);
+
+                addToHistory(finalResult);
+                sendResponse({ success: true, result: finalResult });
+
+            } catch (error: any) {
+                console.error("Background: Analysis process failed:", error);
+                const errorMsg = error?.message || "Unknown background error";
+                sendResponse({ success: false, error: errorMsg });
+            }
+        })();
 
         return true; // Keep message channel open for async response
     }
     // ...
-    // Helper to save history
-    const addToHistory = (result: any) => {
-        chrome.storage.local.get(['veritas_history'], (data) => {
-            const history = data.veritas_history || [];
-            const newItem = {
-                id: result.task_id || Date.now().toString(),
-                date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                verdict: result.verdict || 'UNKNOWN',
-                confidence: result.confidence || 0
-            };
-            const updated = [newItem, ...history].slice(0, 10);
-            chrome.storage.local.set({ veritas_history: updated });
-        });
-    };
+    // Helper to save history (Moved to top)
+
 
     if (request.type === 'HEALTH_CHECK') {
         apiClient.healthCheck()
