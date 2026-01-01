@@ -116,9 +116,9 @@ Veritas-AI/
 - Requires 720p+ resolution for accurate rPPG extraction.
 
 ### Future Roadmap
-- [ ] **Edge Processing**: Porting the rPPG engine to **WebAssembly (Wasm)** for zero-latency local detection.
-- [ ] **Voiceprint Guard**: Integrating audio analysis for voice clone detection.
-- [ ] **Multi-Target Analysis**: Parallel detection for multiple people in a single frame.
+-  **Edge Processing**: Porting the rPPG engine to **WebAssembly (Wasm)** for zero-latency local detection.
+-  **Voiceprint Guard**: Integrating audio analysis for voice clone detection.
+-  **Multi-Target Analysis**: Parallel detection for multiple people in a single frame.
 
 ---
 
