@@ -1,5 +1,114 @@
 
-import { VideoCapture } from './video-capture';
+
+// VERITAS DEBUG: INLINED VIDEO CAPTURE TO FIX TDZ
+interface VeritasVideoFrame {
+  data: string; // Base64 encoded frame
+  timestamp: number;
+}
+
+class VideoCapture {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D | null;
+
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    this.ctx = this.canvas.getContext('2d');
+  }
+
+  async captureFrame(video: HTMLVideoElement): Promise<VeritasVideoFrame | null> {
+    const frame = this.captureFrameDirect(video);
+    if (frame) return frame;
+    return await this.captureFrameFallback(video);
+  }
+
+  captureFrameDirect(video: HTMLVideoElement): VeritasVideoFrame | null {
+    if (!this.ctx || video.videoWidth === 0 || video.videoHeight === 0) return null;
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    const MAX_DIMENSION = 640;
+    let finalWidth = width;
+    let finalHeight = height;
+    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+      const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+      finalWidth = Math.round(width * ratio);
+      finalHeight = Math.round(height * ratio);
+    }
+    this.canvas.width = finalWidth;
+    this.canvas.height = finalHeight;
+    try {
+      this.ctx.drawImage(video, 0, 0, finalWidth, finalHeight);
+      const dataUrl = this.canvas.toDataURL('image/jpeg', 0.8);
+      return {
+        data: dataUrl.split(',')[1],
+        timestamp: video.currentTime
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async captureFrameFallback(video: HTMLVideoElement): Promise<VeritasVideoFrame | null> {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'CAPTURE_TAB' }, async (response) => {
+        if (!response || !response.success) {
+          resolve(null);
+          return;
+        }
+        const rect = video.getBoundingClientRect();
+        try {
+          const blob = await fetch(response.dataUrl).then(r => r.blob());
+          const imgBitmap = await createImageBitmap(blob);
+          const dpr = window.devicePixelRatio || 1;
+          this.canvas.width = 640;
+          this.canvas.height = 360;
+          if (this.ctx) {
+            this.ctx.drawImage(
+              imgBitmap,
+              rect.left * dpr, rect.top * dpr,
+              rect.width * dpr, rect.height * dpr,
+              0, 0,
+              this.canvas.width, this.canvas.height
+            );
+            const dataUrl = this.canvas.toDataURL('image/jpeg', 0.8);
+            resolve({
+              data: dataUrl.split(',')[1],
+              timestamp: video.currentTime
+            });
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          console.error("Fallback crop failed", e);
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  async captureSequence(video: HTMLVideoElement, count: number = 30, intervalMs: number = 100): Promise<VeritasVideoFrame[]> {
+    const frames: VeritasVideoFrame[] = [];
+    const testFrame = this.captureFrameDirect(video);
+    const useFallback = !testFrame;
+    if (testFrame) frames.push(testFrame);
+    const finalInterval = useFallback ? Math.max(intervalMs, 300) : intervalMs;
+    for (let i = 0; i < count; i++) {
+      if (useFallback) {
+        const frame = await this.captureFrameFallback(video);
+        if (frame) frames.push(frame);
+      } else {
+        if (i > 0) {
+          const frame = this.captureFrameDirect(video);
+          if (frame) frames.push(frame);
+        }
+      }
+      if (i < count - 1) {
+        await new Promise(resolve => setTimeout(resolve, finalInterval));
+      }
+    }
+    return frames;
+  }
+}
+
 
 
 console.log("Veritas-AI: Content script loaded");
@@ -125,17 +234,19 @@ class VeritasInjector {
     console.log("Veritas-AI: Button injected successfully");
   }
 
-  public handleExternalScan(sendResponse: (response: any) => void) {
+  public handleExternalScan(message: any, sendResponse: (response: any) => void) {
     const video = document.querySelector('video');
     const btn = document.querySelector('#veritas-btn') as HTMLButtonElement | null;
+    const options = message.options || { enable_gemini: true };
 
     if (video && btn) {
-      console.log("Veritas-AI: Scan triggered from popup");
+      console.log("Veritas-AI: Scan triggered from popup", options);
       if (!this.analyzing) {
         if (!this.consentGiven) {
-          this.showConsentModal(video, btn);
+          // Pass options to consent modal -> startAnalysis
+          this.showConsentModal(video, btn, options);
         } else {
-          this.startAnalysis(video, btn);
+          this.startAnalysis(video, btn, options);
         }
       }
       sendResponse({ success: true });
@@ -144,7 +255,7 @@ class VeritasInjector {
     }
   }
 
-  showConsentModal(video: HTMLVideoElement, btn: HTMLButtonElement) {
+  showConsentModal(video: HTMLVideoElement, btn: HTMLButtonElement, options = { enable_gemini: true }) {
     if (this.overlay) this.overlay.remove();
 
     this.overlay = document.createElement('div');
@@ -190,11 +301,11 @@ class VeritasInjector {
       this.consentGiven = true;
       this.overlay?.remove();
       this.overlay = null;
-      await this.startAnalysis(video, btn);
+      await this.startAnalysis(video, btn, options);
     };
   }
 
-  async startAnalysis(video: HTMLVideoElement, btn: HTMLButtonElement) {
+  async startAnalysis(video: HTMLVideoElement, btn: HTMLButtonElement, options = { enable_gemini: true }) {
     try {
       this.analyzing = true;
       btn.innerHTML = `<span style="font-weight:600">Starting...</span>`;
@@ -222,7 +333,8 @@ class VeritasInjector {
           data: {
             frames: frames,
             video_url: window.location.href,
-            consent_given: true
+            consent_given: true,
+            enable_gemini: options.enable_gemini
           }
         }, (res) => {
           if (chrome.runtime.lastError) {
@@ -325,15 +437,19 @@ class VeritasInjector {
     });
 
     this.overlay.innerHTML = `
-        <div style="margin-bottom: 16px;">
-            <div style="width: 40px; height: 40px; border: 3px solid #38bdf8; border-top-color: transparent; border-radius: 50%; animation: veritas-spin 1s linear infinite; margin: 0 auto;"></div>
+        <div style="margin-bottom: 20px; position: relative;">
+            <div style="width: 60px; height: 60px; border: 2px solid rgba(56, 189, 248, 0.1); border-top-color: #38bdf8; border-bottom-color: #38bdf8; border-radius: 50%; animation: veritas-spin 2s linear infinite; margin: 0 auto; box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);"></div>
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; background: rgba(56, 189, 248, 0.1); border-radius: 50%; animation: veritas-pulse-inner 1.5s ease-in-out infinite;"></div>
         </div>
-        <div id="veritas-scan-status" style="font-family: 'Inter', monospace; font-size: 14px; color: #38bdf8; font-weight: 600; letter-spacing: 0.5px;">INITIALIZING</div>
-        <div style="margin-top: 12px; height: 40px; overflow: hidden; position: relative; opacity: 0.6;">
-            <!-- Fake waveform visualization -->
-            <div style="display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%;">
-                ${Array.from({ length: 15 }).map(() => `<div style="width: 4px; background: #38bdf8; border-radius: 2px; animation: veritas-wave ${0.5 + Math.random()}s ease-in-out infinite;"></div>`).join('')}
+        <div id="veritas-scan-status" style="font-family: 'Inter', monospace; font-size: 14px; color: #fff; font-weight: 600; letter-spacing: 2px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);">INITIALIZING</div>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; letter-spacing: 0.5px;">ESTABLISHING SECURE CONNECTION</div>
+        
+        <div style="margin-top: 24px; height: 60px; width: 100%; overflow: hidden; position: relative; background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.05), transparent); border-top: 1px solid rgba(56, 189, 248, 0.1); border-bottom: 1px solid rgba(56, 189, 248, 0.1);">
+            <!-- High-tech waveform visualization -->
+            <div style="display: flex; align-items: center; justify-content: center; gap: 4px; height: 100%; mask-image: linear-gradient(90deg, transparent, black 20%, black 80%, transparent);">
+                ${Array.from({ length: 24 }).map((_, i) => `<div style="width: 3px; background: #38bdf8; border-radius: 10px; height: 10px; animation: veritas-wave 1s ease-in-out infinite; animation-delay: ${i * 0.05}s; box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);"></div>`).join('')}
             </div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 1px; background: rgba(56, 189, 248, 0.3); box-shadow: 0 0 10px #38bdf8; animation: veritas-scanline 2s linear infinite;"></div>
         </div>
       `;
 
@@ -342,8 +458,10 @@ class VeritasInjector {
       const style = document.createElement('style');
       style.id = 'veritas-keyframes';
       style.textContent = `
-            @keyframes veritas-spin { to { transform: rotate(360deg); } }
-            @keyframes veritas-wave { 0%, 100% { height: 20%; } 50% { height: 80%; } }
+            @keyframes veritas-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            @keyframes veritas-pulse-inner { 0%, 100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; } 50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.2; } }
+            @keyframes veritas-wave { 0%, 100% { height: 10%; opacity: 0.3; } 50% { height: 70%; opacity: 1; } }
+            @keyframes veritas-scanline { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
           `;
       document.head.appendChild(style);
     }
@@ -369,6 +487,29 @@ class VeritasInjector {
       return `<li style="margin-bottom:8px; opacity:0.95; color:${color}; font-size:13px; line-height:1.4;">${e}</li>`;
     }).join('');
 
+    // Pulse Graph Generation
+    let graphHtml = '';
+    if (result.bio_guard?.pulse_signal && result.bio_guard.pulse_signal.length > 10) {
+      const data = result.bio_guard.pulse_signal;
+      const min = Math.min(...data);
+      const max = Math.max(...data);
+      const range = max - min || 1;
+      const points = data.map((v: number, i: number) => {
+        const x = (i / (data.length - 1)) * 100;
+        const y = 100 - ((v - min) / range) * 100;
+        return `${x},${y}`;
+      }).join(' ');
+
+      graphHtml = `
+        <div style="margin-top: 8px; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden; position: relative;">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width: 100%; height: 100%; opacity: 0.8;">
+                <polyline points="${points}" fill="none" stroke="${result.bio_guard.pulse_detected ? '#22c55e' : '#94a3b8'}" stroke-width="2" vector-effect="non-scaling-stroke" />
+            </svg>
+             <div style="position:absolute; top:2px; left:4px; font-size:8px; color:rgba(255,255,255,0.4);">LIVE SIGNAL</div>
+        </div>
+        `;
+    }
+
     this.overlay = document.createElement('div');
     this.overlay.className = 'veritas-glass veritas-fade-in';
     Object.assign(this.overlay.style, {
@@ -388,7 +529,7 @@ class VeritasInjector {
     // Enhanced confidence display with color coding
     const confidenceColor = confidence >= 85 ? '#22c55e' : (confidence >= 70 ? '#3b82f6' : (confidence >= 50 ? '#eab308' : '#ef4444'));
     const confidenceLabel = confidence >= 90 ? 'VERY HIGH' : (confidence >= 80 ? 'HIGH' : (confidence >= 70 ? 'MODERATE' : (confidence >= 50 ? 'LOW' : 'VERY LOW')));
-    
+
     this.overlay.innerHTML = `
       <div style="padding: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); background: linear-gradient(135deg, ${color}15 0%, transparent 100%);">
          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
@@ -421,7 +562,7 @@ class VeritasInjector {
                ${result.bio_guard?.pulse_detected ? `❤️ ${Math.round(result.bio_guard.bpm)} BPM` : '❌ No Pulse'}
              </div>
              ${result.bio_guard?.snr ? `<div style="font-size:11px; opacity:0.7; color:${result.bio_guard.snr > 5 ? '#22c55e' : (result.bio_guard.snr > 2 ? '#eab308' : '#ef4444')};">SNR: ${result.bio_guard.snr.toFixed(1)}</div>` : ''}
-             ${result.bio_guard?.confidence ? `<div style="font-size:10px; opacity:0.6; margin-top:2px;">Conf: ${Math.round(result.bio_guard.confidence * 100)}%</div>` : ''}
+             ${graphHtml}
            </div>
            <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.2);">
              <div style="font-size:10px; text-transform: uppercase; letter-spacing: 1px; opacity:0.6; margin-bottom:6px; font-weight: 600;">PHYSICS-GUARD</div>
@@ -471,7 +612,7 @@ const injector = new VeritasInjector();
 // Global listener
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.type === 'START_SCAN') {
-    injector.handleExternalScan(sendResponse);
+    injector.handleExternalScan(request, sendResponse);
     return true;
   }
 });

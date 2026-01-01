@@ -8,6 +8,27 @@ interface ResultsPanelProps {
     onReset: () => void;
 }
 
+const PulseGraph = ({ data }: { data: number[] }) => {
+    if (!data || data.length < 10) return null;
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+    const points = data.map((v, i) => {
+        const x = (i / (data.length - 1)) * 100;
+        const y = 100 - ((v - min) / range) * 100;
+        return `${x},${y}`;
+    }).join(' ');
+
+    return (
+        <div className="w-full h-16 bg-black/20 rounded-lg overflow-hidden border border-white/5 relative mt-2">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full opacity-80">
+                <polyline points={points} fill="none" stroke="#38bdf8" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            </svg>
+            <div className="absolute top-1 left-2 text-[10px] text-primary/70 font-mono">LIVE SIGNAL</div>
+        </div>
+    );
+};
+
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
     const isReal = result.verdict === 'LIKELY_REAL';
     const isFake = result.verdict === 'LIKELY_FAKE';
@@ -60,6 +81,11 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) =
                                 style={{ width: `${(result.bio_guard?.confidence || 0) * 100}%` }}
                             />
                         </div>
+
+                        {/* Pulse Graph */}
+                        {result.bio_guard?.pulse_signal && (
+                            <PulseGraph data={result.bio_guard.pulse_signal} />
+                        )}
                     </div>
                 </div>
 
@@ -85,7 +111,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) =
                         ) : (
                             <div className="flex items-center gap-2 text-gray-500">
                                 <AlertTriangle className="w-3 h-3" />
-                                <span>AI Analysis Unavailable</span>
+                                <span>AI Analysis Unavailable (or Disabled)</span>
                             </div>
                         )}
                     </div>

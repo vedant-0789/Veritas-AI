@@ -186,6 +186,7 @@ class RPPGAnalyzer:
                 "assessment": assessment,
                 "blink_analysis": blink_analysis,
                 "landmark_stability": landmark_stability,
+                "pulse_signal": pulse_signal.tolist() if len(pulse_signal) > 0 else [],
                 "details": {
                     "frames_analyzed": len(decoded_frames),
                     "signal_quality": "good" if snr > 5 else "fair" if snr > 2 else "poor",

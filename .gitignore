@@ -16,6 +16,9 @@ backend/.env
 .DS_Store
 Thumbs.db
 
+# Internal/Answers
+answers.md
+
 # Logs
 backend/logs/
 

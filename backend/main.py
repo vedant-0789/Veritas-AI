@@ -66,9 +66,41 @@ if os.getenv("ENABLE_RATE_LIMITING", "true").lower() == "true":
 # Include metrics router
 app.include_router(metrics_router)
 
+# ... (previous imports)
+
 # Store for async task results (in-memory for MVP)
 task_results = {}
 
+def cleanup_stale_tasks():
+    """Remove tasks older than 10 minutes to prevent memory leaks"""
+    try:
+        current_time = datetime.now()
+        # Create list of keys to remove to avoid modification during iteration
+        to_remove = []
+        
+        for tid, result in task_results.items():
+            try:
+                # Parse timestamp
+                if "timestamp" in result:
+                    task_time = datetime.fromisoformat(result["timestamp"])
+                    age_seconds = (current_time - task_time).total_seconds()
+                    
+                    # Remove if older than 10 minutes (600 seconds)
+                    if age_seconds > 600:
+                        to_remove.append(tid)
+            except Exception:
+                # If timestamp parsing fails, mark for removal to be safe
+                to_remove.append(tid)
+                
+        # Remove stale tasks
+        for tid in to_remove:
+            del task_results[tid]
+            
+        if to_remove:
+            logger.info(f"Cleaned up {len(to_remove)} stale analysis tasks")
+            
+    except Exception as e:
+        logger.error(f"Error during task cleanup: {e}")
 
 # ================== Request/Response Models ==================
 
@@ -83,6 +115,7 @@ class AnalyzeRequest(BaseModel):
     frames: List[FrameData] = Field(..., description="List of video frames to analyze")
     video_url: Optional[str] = Field(None, description="Source video URL (for reference)")
     consent_given: bool = Field(True, description="User consent for biometric analysis")
+    enable_gemini: bool = Field(True, description="Enable Gemini AI analysis")
 
 
 class AnalysisResult(BaseModel):
@@ -160,6 +193,10 @@ async def analyze_video(request: AnalyzeRequest, background_tasks: BackgroundTas
     # Generate task ID
     task_id = str(uuid.uuid4())[:8]
     
+    # Run cleanup occasionally
+    if len(task_results) > 100:
+        background_tasks.add_task(cleanup_stale_tasks)
+    
     # Initialize task
     task_results[task_id] = {
         "status": "processing",
@@ -180,7 +217,8 @@ async def analyze_video(request: AnalyzeRequest, background_tasks: BackgroundTas
 async def get_analysis_status(task_id: str):
     """Get the status/result of an analysis task"""
     if task_id not in task_results:
-        raise HTTPException(status_code=404, detail="Task not found")
+        # Check if it was cleaned up
+        raise HTTPException(status_code=404, detail="Task not found (may have expired)")
     
     result = task_results[task_id]
     
@@ -198,10 +236,11 @@ async def get_analysis_status(task_id: str):
 
 
 @app.post("/api/analyze-sync", response_model=AnalysisResult)
-async def analyze_video_sync(request: AnalyzeRequest):
+def analyze_video_sync(request: AnalyzeRequest):
     """
     Synchronous analysis - waits for result before responding.
-    Use for smaller frame sets or when immediate results needed.
+    NOTE: Defined as synchronous 'def' so FastAPI runs it in a threadpool,
+    preventing the event loop from being blocked by heavy computation.
     """
     logger.info(f"Analysis request received: {len(request.frames)} frames")
     
@@ -234,7 +273,15 @@ async def analyze_video_sync(request: AnalyzeRequest):
         bio_result = rppg_analyzer.analyze(decoded_frames)
         
         # Run Physics-Guard (Gemini) analysis
-        physics_result = gemini_analyzer.analyze(decoded_frames)
+        if request.enable_gemini:
+            physics_result = gemini_analyzer.analyze(decoded_frames)
+        else:
+            physics_result = {
+                "available": False, 
+                "assessment": "Skipped by user settings (Bio-Guard Only)",
+                "confidence": 0.5,
+                "is_suspicious": None
+            }
         
         # Run Temporal analysis
         temporal_result = temporal_analyzer.analyze(decoded_frames)
@@ -285,8 +332,12 @@ async def analyze_video_sync(request: AnalyzeRequest):
 
 # ================== Background Processing ==================
 
-async def process_analysis(task_id: str, request: AnalyzeRequest):
-    """Background task for processing video analysis"""
+def process_analysis(task_id: str, request: AnalyzeRequest):
+    """
+    Background task for processing video analysis.
+    Defined as synchronous 'def' so FastAPI runs it in a threadpool,
+    avoiding event loop blocking during heavy computation.
+    """
     start_time = datetime.now()
     
     try:
@@ -314,7 +365,15 @@ async def process_analysis(task_id: str, request: AnalyzeRequest):
         bio_result = rppg_analyzer.analyze(decoded_frames)
         
         # Run Physics-Guard (Gemini) analysis
-        physics_result = gemini_analyzer.analyze(decoded_frames)
+        if request.enable_gemini:
+            physics_result = gemini_analyzer.analyze(decoded_frames)
+        else:
+            physics_result = {
+                "available": False, 
+                "assessment": "Skipped by user settings (Bio-Guard Only)",
+                "confidence": 0.5,
+                "is_suspicious": None
+            }
         
         # Run Temporal analysis
         temporal_result = temporal_analyzer.analyze(decoded_frames)

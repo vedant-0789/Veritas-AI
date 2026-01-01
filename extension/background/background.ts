@@ -22,6 +22,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         apiClient.analyzeVideoSync(request.data)
             .then(result => {
                 console.log("Background: Analysis success", result);
+                addToHistory(result);
                 sendResponse({ success: true, result });
             })
             .catch(error => {
@@ -31,6 +32,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         return true; // Keep message channel open for async response
     }
+    // ...
+    // Helper to save history
+    const addToHistory = (result: any) => {
+        chrome.storage.local.get(['veritas_history'], (data) => {
+            const history = data.veritas_history || [];
+            const newItem = {
+                id: result.task_id || Date.now().toString(),
+                date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                verdict: result.verdict || 'UNKNOWN',
+                confidence: result.confidence || 0
+            };
+            const updated = [newItem, ...history].slice(0, 10);
+            chrome.storage.local.set({ veritas_history: updated });
+        });
+    };
 
     if (request.type === 'HEALTH_CHECK') {
         apiClient.healthCheck()

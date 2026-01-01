@@ -10,6 +10,7 @@ export interface AnalysisRequest {
     frames: Array<{ data: string; timestamp: number }>;
     video_url?: string;
     consent_given: boolean;
+    enable_gemini?: boolean;
 }
 
 export interface AnalysisResult {
@@ -20,7 +21,13 @@ export interface AnalysisResult {
     evidence?: string[];
     summary?: string;
     assessment?: string; // Legacy field
-    bio_guard?: any;
+    bio_guard?: {
+        pulse_detected: boolean;
+        bpm?: number;
+        confidence: number;
+        pulse_signal?: number[]; // Array of values for graph
+        [key: string]: any;
+    };
     physics_guard?: any;
 }
 

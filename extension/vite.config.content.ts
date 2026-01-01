@@ -6,6 +6,7 @@ export default defineConfig({
     build: {
         emptyOutDir: false, // Don't delete popup build
         outDir: 'dist',
+        minify: false, // Disable minification for debugging
         lib: {
             entry: resolve(__dirname, 'content/content-script.ts'),
             name: 'content',
