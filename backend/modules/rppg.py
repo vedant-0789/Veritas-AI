@@ -139,9 +139,9 @@ class RPPGAnalyzer:
                 }
             
             # Extract ROI signals from each frame (Separate signals for consensus)
-            roi_signals_map = self._extract_roi_signals(decoded_frames)
+            roi_data = self._extract_roi_signals(decoded_frames)
             
-            if not roi_signals_map:
+            if not roi_data or len(roi_data) < 2: # metadata is always there
                 return {
                     "pulse_detected": False,
                     "confidence": 0.0,
@@ -150,6 +150,10 @@ class RPPGAnalyzer:
                     "assessment": "No face detected in video frames",
                     "details": "Could not extract facial ROI signals"
                 }
+            
+            # Metadata and signals separated
+            metadata = roi_data.pop("metadata", {"max_faces": 0})
+            roi_signals_map = roi_data
             
             # Process each ROI signal
             roi_results = []
@@ -207,31 +211,31 @@ class RPPGAnalyzer:
             
             # Determine if pulse is detected
             # Be more lenient if we have consensus
-            pulse_detected = (confidence > 0.38 and snr > 2.0)
+            pulse_detected = (confidence > 0.35 and snr > 1.8)
             is_synthetic = False
             
             # --- SYNTHETIC PATTERN DETECTION ---
-            # Real rPPG signals rarely exceed SNR 15 in variable environments.
-            # SNR 30+ is almost certainly a synthetic pattern or a screen refresh artifact.
-            if snr > 18.0:
+            # Real rPPG signals in high-quality video (4K/HD, good lighting) can reach SNR 25-35.
+            # SNR 45+ is extremely rare for biological signals and usually indicates AI generation or screen capture artifacts.
+            if snr > 42.0:
                 is_synthetic = True
-                pulse_detected = False # Treat as noise/fake
-                confidence *= 0.3
+                pulse_detected = False 
+                confidence *= 0.4
                 
-            if roi_consensus and snr > 1.5 and not is_synthetic:
+            if roi_consensus and snr > 1.2 and not is_synthetic:
                 pulse_detected = True
-                confidence = min(0.95, confidence * 1.2)
+                confidence = min(0.96, confidence * 1.2)
             
-            # If SNR is high but no consensus, it's definitely periodic noise/AI pattern
-            if not roi_consensus and snr > 5.0:
+            # If SNR is high but NO consensus, it's a fake/noise
+            if not roi_consensus and snr > 10.0:
                 is_synthetic = True
                 pulse_detected = False
-                confidence *= 0.2
+                confidence *= 0.15
 
-            # Penalize unrealistic BPMs
-            if pulse_detected and (bpm > 105 or bpm < 55):
-                confidence *= 0.6
-                if snr > 10: # Perfect but weird BPM? Very suspicious.
+            # Penalize unrealistic BPMs only if SNR isn't perfect
+            if pulse_detected and (bpm > 115 or bpm < 45):
+                confidence *= 0.5
+                if snr > 15: # Too perfect but wrong range?
                     is_synthetic = True
                     pulse_detected = False
 
@@ -288,7 +292,9 @@ class RPPGAnalyzer:
                 "pulse_signal": pulse_signal.tolist() if len(pulse_signal) > 0 else [],
                 "details": {
                     "frames_analyzed": len(decoded_frames),
-                    "signal_quality": "good" if snr > 5 else "fair" if snr > 2 else "poor",
+                    "signal_quality": "excellent" if snr > 15 else "good" if snr > 5 else "fair",
+                    "multi_face": metadata.get("max_faces", 0) > 1,
+                    "face_count": metadata.get("max_faces", 0),
                     "is_suspicious_signal": is_synthetic,
                     "algorithm": "POS (Plane-Orthogonal-to-Skin)",
                     "temporal_analysis": "enabled" if len(decoded_frames) >= 10 else "insufficient_frames"
@@ -323,19 +329,23 @@ class RPPGAnalyzer:
         if not MEDIAPIPE_AVAILABLE or self.face_mesh is None:
             # Fallback: use center of frame as ROI
             center_sig = self._extract_center_roi(frames)
-            return {"center": center_sig} if center_sig is not None else {}
+            return {"center": center_sig, "metadata": {"max_faces": 1 if center_sig is not None else 0}}
         
         roi_signals = {
             "forehead": [],
             "left_cheek": [],
             "right_cheek": []
         }
+        max_faces = 0
         
         for frame in frames:
             # Process with MediaPipe
             results = self.face_mesh.process(frame)
             
             if results.multi_face_landmarks:
+                face_count = len(results.multi_face_landmarks)
+                max_faces = max(max_faces, face_count)
+                
                 landmarks = results.multi_face_landmarks[0]
                 h, w = frame.shape[:2]
                 
@@ -363,6 +373,9 @@ class RPPGAnalyzer:
         for key, sig in roi_signals.items():
             if len(sig) >= 5:
                 result[key] = np.array(sig)
+        
+        # Add metadata
+        result["metadata"] = {"max_faces": max_faces}
                 
         return result
 

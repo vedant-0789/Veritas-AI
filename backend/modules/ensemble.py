@@ -135,6 +135,11 @@ class EnsembleDecision:
                     if "❌" in finding or "inconsistent" in finding.lower():
                         evidence.append(f"   • {finding}")
         
+        # New: Multi-face Detection Warning
+        if bio_result.get("details", {}).get("multi_face"):
+            evidence.append("⚠️ Multi-face detected. Analysis restricted to primary face.")
+            evidence.append("   Note: Multi-face precision mode currently unavailable.")
+        
         # Adjust weights based on available data
         if not physics_available:
             self.bio_weight = 0.7
@@ -180,23 +185,23 @@ class EnsembleDecision:
                 real_score -= weight * (1.0 - temporal_consistency)
         
         # Special overrides for very strong evidence
-        # Override 1: Very strong pulse = definitely real (tightened thresholds)
-        if pulse_detected and 5 <= snr <= 15 and bio_confidence > 0.80 and 60 <= bpm <= 95 and not is_synthetic:
-            real_score = max(real_score, 0.90)
+        # Override 1: Very strong pulse = likely real (balanced thresholds)
+        if pulse_detected and 4 <= snr <= 40 and bio_confidence > 0.70 and 50 <= bpm <= 100 and not is_synthetic:
+            real_score = max(real_score, 0.85)
             if "🔬 Strong biological authenticity" not in str(evidence):
                 evidence.insert(0, "🔬 Strong biological authenticity signals detected")
         
-        # Override 1b: If pulse is TOO strong, it's a fake
-        if snr > 20:
-            real_score = min(real_score, 0.15)
-            evidence.append("🚨 Excessive Signal-to-Noise ratio detected (Common in AI generation)")
+        # Override 1b: If pulse is ABSURDLY strong, then it's a fake
+        if snr > 50:
+            real_score = min(real_score, 0.20)
+            evidence.append("🚨 Excessive Signal-to-Noise ratio (SNR > 50) - Likely synthetic injection")
         
         # Override 1b: Good pulse + AI confirms real = very high confidence real
-        if pulse_detected and snr > 5 and is_real is True and physics_confidence > 0.75:
-            real_score = max(real_score, 0.88)
-        
-        # Override 2: Strong AI fake + no pulse = definitely fake (high confidence)
-        if not pulse_detected and snr < 1.5 and physics_available and is_suspicious and physics_confidence > 0.80:
+        if pulse_detected and snr > 3 and (is_real is True or is_suspicious is False) and physics_confidence > 0.65:
+            real_score = max(real_score, 0.85)
+            
+        # Override 2: Strong AI fake + no pulse = definitely fake
+        if not pulse_detected and snr < 1.0 and physics_available and is_suspicious and physics_confidence > 0.75:
             real_score = min(real_score, 0.12)
             if "🚨 Multiple indicators" not in str(evidence):
                 evidence.insert(0, "🚨 Multiple strong indicators of synthetic content")
