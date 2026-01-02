@@ -565,18 +565,18 @@ class VeritasCore {
         </ul>
         
         <div style="margin-top: 20px; display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
-           <div style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.2);">
+            <div style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.2);">
              <div style="font-size:10px; text-transform: uppercase; letter-spacing: 1px; opacity:0.6; margin-bottom:6px; font-weight: 600;">BIO-GUARD</div>
-             <div style="font-weight:700; font-size:16px; color:${result.bio_guard?.pulse_detected ? '#22c55e' : '#94a3b8'}; margin-bottom:4px;">
-               ${result.bio_guard?.pulse_detected ? `❤️ ${Math.round(result.bio_guard.bpm)} BPM` : '❌ No Pulse'}
+             <div style="font-weight:700; font-size:16px; color:${result.bio_guard?.pulse_detected ? '#22c55e' : (result.bio_guard?.is_synthetic ? '#ef4444' : '#94a3b8')}; margin-bottom:4px;">
+               ${result.bio_guard?.is_synthetic ? '⚠️ Synthetic Pattern' : (result.bio_guard?.pulse_detected ? `❤️ ${Math.round(result.bio_guard.bpm)} BPM` : '❌ No Pulse')}
              </div>
-             ${result.bio_guard?.snr ? `<div style="font-size:11px; opacity:0.7; color:${result.bio_guard.snr > 5 ? '#22c55e' : (result.bio_guard.snr > 2 ? '#eab308' : '#ef4444')};">SNR: ${result.bio_guard.snr.toFixed(1)}</div>` : ''}
+             ${result.bio_guard?.snr ? `<div style="font-size:11px; opacity:0.7; color:${result.bio_guard.snr > 15 || result.bio_guard.snr < 2 ? '#ef4444' : (result.bio_guard.snr > 5 ? '#22c55e' : '#eab308')};">SNR: ${result.bio_guard.snr.toFixed(1)} ${result.bio_guard.snr > 20 ? '(Suspicious)' : ''}</div>` : ''}
              ${graphHtml}
            </div>
            <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%); padding: 14px; border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.2);">
              <div style="font-size:10px; text-transform: uppercase; letter-spacing: 1px; opacity:0.6; margin-bottom:6px; font-weight: 600;">PHYSICS-GUARD</div>
              <div style="font-weight:700; font-size:16px; color:${result.physics_guard?.is_suspicious ? '#ef4444' : (result.physics_guard?.is_real ? '#22c55e' : '#94a3b8')}; margin-bottom:4px;">
-               ${result.physics_guard?.is_real ? '✅ Authentic' : (result.physics_guard?.is_suspicious ? '❌ Suspicious' : '⚠️ Uncertain')}
+               ${result.physics_guard?.is_real ? '✅ Authentic' : (result.physics_guard?.is_suspicious ? '❌ Synthetic' : '⚠️ Uncertain')}
              </div>
              ${result.physics_guard?.confidence ? `<div style="font-size:11px; opacity:0.7;">Conf: ${Math.round(result.physics_guard.confidence * 100)}%</div>` : ''}
            </div>

@@ -47,6 +47,7 @@ class EnsembleDecision:
         # Extract Bio-Guard signals
         bio_confidence = bio_result.get("confidence", 0.0)
         pulse_detected = bio_result.get("pulse_detected", False)
+        is_synthetic = bio_result.get("is_synthetic", False)
         bpm = bio_result.get("bpm")
         snr = bio_result.get("snr", 0.0)
         
@@ -100,10 +101,14 @@ class EnsembleDecision:
             evidence.append("⚠️ Weak biological signals (possible deepfake or heavy compression)")
         
         # Strong Fake Indicator 2: AI strongly indicates fake
-        if physics_available and is_suspicious is True and physics_confidence > 0.8:
-            fake_indicators.append(("strong_ai_fake", 0.40))
-            if "AI strongly indicates" not in str(evidence):
-                evidence.insert(0, "🤖 AI strongly indicates synthetic content")
+        if physics_available and is_suspicious is True and physics_confidence > 0.6:
+            fake_indicators.append(("ai_detected_fake", 0.45))
+            evidence.append("🤖 AI analysis detected specific manipulation artifacts")
+            
+        # New: Synthetic Pulse Detection
+        if is_synthetic:
+            fake_indicators.append(("synthetic_pulse", 0.50))
+            evidence.append("🚨 Suspiciously perfect periodic signal detected (Synthetic Pulse Artifact)")
         
         # Vision API indicators (if available)
         if vision_result and vision_result.get("available"):
@@ -175,11 +180,16 @@ class EnsembleDecision:
                 real_score -= weight * (1.0 - temporal_consistency)
         
         # Special overrides for very strong evidence
-        # Override 1: Very strong pulse = definitely real (high confidence)
-        if pulse_detected and snr > 8 and bio_confidence > 0.75 and 50 <= bpm <= 120:
+        # Override 1: Very strong pulse = definitely real (tightened thresholds)
+        if pulse_detected and 5 <= snr <= 15 and bio_confidence > 0.80 and 60 <= bpm <= 95 and not is_synthetic:
             real_score = max(real_score, 0.90)
             if "🔬 Strong biological authenticity" not in str(evidence):
                 evidence.insert(0, "🔬 Strong biological authenticity signals detected")
+        
+        # Override 1b: If pulse is TOO strong, it's a fake
+        if snr > 20:
+            real_score = min(real_score, 0.15)
+            evidence.append("🚨 Excessive Signal-to-Noise ratio detected (Common in AI generation)")
         
         # Override 1b: Good pulse + AI confirms real = very high confidence real
         if pulse_detected and snr > 5 and is_real is True and physics_confidence > 0.75:
@@ -249,9 +259,13 @@ class EnsembleDecision:
         else:  # 35-65% = UNCERTAIN
             verdict = "UNCERTAIN"
             verdict_display = "⚠️ UNCERTAIN"
-            # For uncertain: lower confidence, centered around 0.5
-            # Map 0.35-0.65 to 0.40-0.60 confidence
-            confidence = 0.50 - abs(real_score - 0.50) * 0.40
+            # For uncertain: lower confidence
+            confidence = 0.40 + (abs(real_score - 0.50) * 0.40)
+            
+        # Final penalty: If AI is uncertain but Score is high, reduce confidence
+        if verdict == "LIKELY_REAL" and physics_available and physics_confidence < 0.5:
+            confidence *= 0.85
+            evidence.append("⚠️ Bio-Guard is confident but Physics-Guard remains uncertain")
         
         # Generate summary
         summary = self._generate_summary(verdict, bio_result, physics_result)

@@ -15,20 +15,23 @@ import io
 
 try:
     import mediapipe as mp
-    # Check for old API (solutions) or new API (tasks)
-    if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_mesh'):
-        # Old API available
-        try:
-            test_mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1)
-            test_mesh.close()
+    
+    # Try importing solutions explicitly
+    try:
+        from mediapipe.python.solutions import face_mesh as mp_face_mesh
+        from mediapipe.python.solutions import drawing_utils as mp_drawing
+        MEDIAPIPE_AVAILABLE = True
+        MEDIAPIPE_USE_OLD_API = True
+        print("✅ MediaPipe (Solutions API) found via explicit import")
+    except ImportError:
+        # Check if it's available on the mp module directly
+        if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_mesh'):
             MEDIAPIPE_AVAILABLE = True
             MEDIAPIPE_USE_OLD_API = True
-            print("✅ MediaPipe (old API) initialized successfully")
-        except Exception as e:
-            raise ImportError(f"MediaPipe old API failed: {e}")
-    else:
-        # New API or not available - use fallback
-        raise ImportError("MediaPipe solutions API not available (new API detected or not installed)")
+            print("✅ MediaPipe (Solutions API) found via mp.solutions")
+        else:
+            raise ImportError("MediaPipe Solutions API not found")
+            
 except (ImportError, AttributeError, Exception) as e:
     MEDIAPIPE_AVAILABLE = False
     MEDIAPIPE_USE_OLD_API = False
@@ -51,15 +54,27 @@ class RPPGAnalyzer:
         self.max_freq = self.max_bpm / 60.0  # 4.0 Hz
         
         # Initialize MediaPipe Face Mesh or OpenCV fallback
-        if MEDIAPIPE_AVAILABLE and MEDIAPIPE_USE_OLD_API:
-            self.mp_face_mesh = mp.solutions.face_mesh
-            self.face_mesh = self.mp_face_mesh.FaceMesh(
-                static_image_mode=False,
-                max_num_faces=1,
-                refine_landmarks=True,
-                min_detection_confidence=0.5,
-                min_tracking_confidence=0.5
-            )
+        if MEDIAPIPE_AVAILABLE:
+            try:
+                # Use the explicitly imported face_mesh module if available, otherwise fallback to mp.solutions
+                fm_mod = globals().get('mp_face_mesh', None)
+                if fm_mod is None and hasattr(mp, 'solutions'):
+                    fm_mod = mp.solutions.face_mesh
+                
+                if fm_mod:
+                    self.face_mesh = fm_mod.FaceMesh(
+                        static_image_mode=False,
+                        max_num_faces=1,
+                        refine_landmarks=True,
+                        min_detection_confidence=0.5,
+                        min_tracking_confidence=0.5
+                    )
+                    print("✅ MediaPipe Face Mesh initialized successfully")
+                else:
+                    raise ImportError("Could not find face_mesh module")
+            except Exception as e:
+                print(f"⚠️ MediaPipe initialization failed: {e}")
+                self.face_mesh = None
         else:
             self.face_mesh = None
             # Initialize OpenCV face detector as fallback
@@ -192,15 +207,33 @@ class RPPGAnalyzer:
             
             # Determine if pulse is detected
             # Be more lenient if we have consensus
-            pulse_detected = (confidence > 0.3 and snr > 2.0)
-            if roi_consensus and snr > 1.5:
+            pulse_detected = (confidence > 0.38 and snr > 2.0)
+            is_synthetic = False
+            
+            # --- SYNTHETIC PATTERN DETECTION ---
+            # Real rPPG signals rarely exceed SNR 15 in variable environments.
+            # SNR 30+ is almost certainly a synthetic pattern or a screen refresh artifact.
+            if snr > 18.0:
+                is_synthetic = True
+                pulse_detected = False # Treat as noise/fake
+                confidence *= 0.3
+                
+            if roi_consensus and snr > 1.5 and not is_synthetic:
                 pulse_detected = True
                 confidence = min(0.95, confidence * 1.2)
             
-            # If SNR is very high but no consensus, it might be a periodic noise
-            if not roi_consensus and snr < 5.0:
+            # If SNR is high but no consensus, it's definitely periodic noise/AI pattern
+            if not roi_consensus and snr > 5.0:
+                is_synthetic = True
                 pulse_detected = False
-                confidence *= 0.5
+                confidence *= 0.2
+
+            # Penalize unrealistic BPMs
+            if pulse_detected and (bpm > 105 or bpm < 55):
+                confidence *= 0.6
+                if snr > 10: # Perfect but weird BPM? Very suspicious.
+                    is_synthetic = True
+                    pulse_detected = False
 
             
             # If we have good signal quality indicators, be more lenient
@@ -215,7 +248,10 @@ class RPPGAnalyzer:
             
             # Enhanced assessment with more details
             assessment_parts = []
-            if pulse_detected:
+            if is_synthetic:
+                assessment_parts.append(f"Likely Fake - Synthetic periodic pattern detected (SNR: {snr:.1f} is suspiciously high for biological signals)")
+                pulse_detected = False
+            elif pulse_detected:
                 if snr > 10:
                     assessment_parts.append(f"Highly Likely Real - Strong biological pulse detected ({int(bpm)} BPM, SNR: {snr:.1f})")
                 else:
@@ -224,7 +260,7 @@ class RPPGAnalyzer:
                 if snr < 1:
                     assessment_parts.append("Likely Fake - No biological pulse signal detected")
                 else:
-                    assessment_parts.append("Uncertain - Weak biological signals (may be compressed video)")
+                    assessment_parts.append("Uncertain - Weak or synthetic biological signals detected")
             
             # Add blink information if available
             if blink_analysis and blink_analysis.get("blinks_detected", 0) > 0:
@@ -242,6 +278,7 @@ class RPPGAnalyzer:
             
             return {
                 "pulse_detected": pulse_detected,
+                "is_synthetic": is_synthetic,
                 "bpm": round(bpm, 1) if bpm else None,
                 "confidence": round(confidence, 3),
                 "snr": round(snr, 2),
@@ -252,6 +289,7 @@ class RPPGAnalyzer:
                 "details": {
                     "frames_analyzed": len(decoded_frames),
                     "signal_quality": "good" if snr > 5 else "fair" if snr > 2 else "poor",
+                    "is_suspicious_signal": is_synthetic,
                     "algorithm": "POS (Plane-Orthogonal-to-Skin)",
                     "temporal_analysis": "enabled" if len(decoded_frames) >= 10 else "insufficient_frames"
                 }
