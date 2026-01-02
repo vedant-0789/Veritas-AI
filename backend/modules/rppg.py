@@ -81,20 +81,28 @@ class RPPGAnalyzer:
         # Right cheek region
         self.right_cheek_landmarks = [346, 347, 348, 349, 350, 357, 358, 359, 360]
     
-    def analyze(self, frames: List[Dict]) -> Dict:
+    def analyze(self, frames: List[Dict], fps: Optional[float] = None) -> Dict:
         """
         Analyze video frames to detect pulse signals.
         
         Args:
             frames: List of dicts with 'data' (bytes) and 'timestamp' (optional)
+            fps: Optional frame rate override
         
         Returns:
             Dict with pulse detection results
         """
+        if fps:
+            self.fps = fps
+            self.min_freq = self.min_bpm / 60.0
+            self.max_freq = self.max_bpm / 60.0
+
         if len(frames) < 5:
             return {
                 "pulse_detected": False,
                 "confidence": 0.0,
+                "bpm": None,
+                "snr": 0.0,
                 "error": "Insufficient frames for analysis (need at least 5)"
             }
         
@@ -110,13 +118,15 @@ class RPPGAnalyzer:
                 return {
                     "pulse_detected": False,
                     "confidence": 0.0,
+                    "bpm": None,
+                    "snr": 0.0,
                     "error": "Could not decode enough valid frames"
                 }
             
-            # Extract ROI signals from each frame
-            rgb_signals = self._extract_roi_signals(decoded_frames)
+            # Extract ROI signals from each frame (Separate signals for consensus)
+            roi_signals_map = self._extract_roi_signals(decoded_frames)
             
-            if rgb_signals is None or len(rgb_signals) < 5:
+            if not roi_signals_map:
                 return {
                     "pulse_detected": False,
                     "confidence": 0.0,
@@ -126,20 +136,72 @@ class RPPGAnalyzer:
                     "details": "Could not extract facial ROI signals"
                 }
             
-            # Apply POS algorithm to extract pulse signal
-            pulse_signal = self._apply_pos_algorithm(rgb_signals)
+            # Process each ROI signal
+            roi_results = []
+            pulse_signals = []
             
-            # Apply bandpass filter
-            filtered_signal = self._bandpass_filter(pulse_signal)
+            for roi_name, rgb_signals in roi_signals_map.items():
+                if len(rgb_signals) < 5:
+                    continue
+                    
+                # Apply POS algorithm
+                p_signal = self._apply_pos_algorithm(rgb_signals)
+                
+                # Apply Moving Average for smoothing
+                p_signal = self._moving_average(p_signal, window=3)
+                
+                # Detrend signal (Remove mean and trend)
+                p_signal = signal.detrend(p_signal)
+                
+                # Apply bandpass filter
+                f_signal = self._bandpass_filter(p_signal)
+                
+                # Analyze frequency
+                roi_bpm, roi_snr, roi_conf = self._analyze_frequency(f_signal)
+                
+                roi_results.append({
+                    "roi": roi_name,
+                    "bpm": roi_bpm,
+                    "snr": roi_snr,
+                    "confidence": roi_conf,
+                    "signal": f_signal
+                })
+                pulse_signals.append(f_signal)
             
-            # Analyze frequency content with FFT
-            bpm, snr, confidence = self._analyze_frequency(filtered_signal)
+            if not roi_results:
+                return {
+                    "pulse_detected": False, 
+                    "confidence": 0.0, 
+                    "bpm": None,
+                    "snr": 0.0,
+                    "assessment": "ROI processing failed"
+                }
+
+            # Average signal for overall analysis and UI display
+            pulse_signal = np.mean(pulse_signals, axis=0)
+            bpm, snr, confidence = self._analyze_frequency(pulse_signal)
+            
+            # ROI Consensus Check
+            # Human blood flows to all facial regions simultaneously
+            bpms = [r['bpm'] for r in roi_results if r['confidence'] > 0.3]
+            roi_consensus = False
+            if len(bpms) >= 2:
+                # Check if BPMs are within 10% of each other
+                bpm_variance = np.std(bpms) / (np.mean(bpms) + 1e-8)
+                roi_consensus = bpm_variance < 0.15
             
             # Determine if pulse is detected
-            # Lower threshold for better detection - adjust based on signal quality
-            # For good quality videos, even SNR > 2 can indicate pulse
-            # For compressed videos, we need higher SNR
-            pulse_detected = confidence > 0.3 and snr > 2.0
+            # Be more lenient if we have consensus
+            pulse_detected = (confidence > 0.3 and snr > 2.0)
+            if roi_consensus and snr > 1.5:
+                pulse_detected = True
+                confidence = min(0.95, confidence * 1.2)
+            
+            # If SNR is very high but no consensus, it might be a periodic noise
+            if not roi_consensus and snr < 5.0:
+                pulse_detected = False
+                confidence *= 0.5
+
             
             # If we have good signal quality indicators, be more lenient
             if snr > 5.0 and 50 <= bpm <= 120:
@@ -199,6 +261,8 @@ class RPPGAnalyzer:
             return {
                 "pulse_detected": False,
                 "confidence": 0.0,
+                "bpm": None,
+                "snr": 0.0,
                 "error": f"Analysis error: {str(e)}"
             }
     
@@ -213,18 +277,21 @@ class RPPGAnalyzer:
         except Exception:
             return None
     
-    def _extract_roi_signals(self, frames: List[np.ndarray]) -> Optional[np.ndarray]:
+    def _extract_roi_signals(self, frames: List[np.ndarray]) -> Dict[str, np.ndarray]:
         """
         Extract RGB signals from facial ROIs across all frames.
-        
-        Returns:
-            numpy array of shape (num_frames, 3) with mean RGB values
+        Returns a map of ROI name to signal array.
         """
         if not MEDIAPIPE_AVAILABLE or self.face_mesh is None:
             # Fallback: use center of frame as ROI
-            return self._extract_center_roi(frames)
+            center_sig = self._extract_center_roi(frames)
+            return {"center": center_sig} if center_sig is not None else {}
         
-        rgb_signals = []
+        roi_signals = {
+            "forehead": [],
+            "left_cheek": [],
+            "right_cheek": []
+        }
         
         for frame in frames:
             # Process with MediaPipe
@@ -234,31 +301,37 @@ class RPPGAnalyzer:
                 landmarks = results.multi_face_landmarks[0]
                 h, w = frame.shape[:2]
                 
-                # Extract ROI from forehead, left cheek, and right cheek
-                roi_values = []
+                # Extract ROIs
+                f_mean = self._get_roi_mean(frame, landmarks, self.forehead_landmarks, w, h)
+                l_mean = self._get_roi_mean(frame, landmarks, self.left_cheek_landmarks, w, h)
+                r_mean = self._get_roi_mean(frame, landmarks, self.right_cheek_landmarks, w, h)
                 
-                for roi_landmarks in [self.forehead_landmarks, self.left_cheek_landmarks, self.right_cheek_landmarks]:
-                    roi_mean = self._get_roi_mean(frame, landmarks, roi_landmarks, w, h)
-                    if roi_mean is not None:
-                        roi_values.append(roi_mean)
+                if f_mean is not None: roi_signals["forehead"].append(f_mean)
+                if l_mean is not None: roi_signals["left_cheek"].append(l_mean)
+                if r_mean is not None: roi_signals["right_cheek"].append(r_mean)
                 
-                if roi_values:
-                    # Average across all ROIs
-                    mean_rgb = np.mean(roi_values, axis=0)
-                    rgb_signals.append(mean_rgb)
-                else:
-                    # Use previous value or skip
-                    if rgb_signals:
-                        rgb_signals.append(rgb_signals[-1])
+                # Handle skips by padding with previous value
+                for key in roi_signals:
+                    if len(roi_signals[key]) < len(roi_signals["forehead"]) and roi_signals[key]:
+                        roi_signals[key].append(roi_signals[key][-1])
             else:
-                # No face detected - use previous value or skip
-                if rgb_signals:
-                    rgb_signals.append(rgb_signals[-1])
+                # No face detected - pad all
+                for key in roi_signals:
+                    if roi_signals[key]:
+                        roi_signals[key].append(roi_signals[key][-1])
         
-        if len(rgb_signals) < 5:
-            return None
-        
-        return np.array(rgb_signals)
+        # Prune and convert to numpy
+        result = {}
+        for key, sig in roi_signals.items():
+            if len(sig) >= 5:
+                result[key] = np.array(sig)
+                
+        return result
+
+    def _moving_average(self, x: np.ndarray, window: int = 3) -> np.ndarray:
+        """Apply moving average to smooth signal"""
+        if len(x) < window: return x
+        return np.convolve(x, np.ones(window)/window, mode='same')
     
     def _get_roi_mean(self, frame: np.ndarray, landmarks, indices: List[int], w: int, h: int) -> Optional[np.ndarray]:
         """Get mean RGB values from a region defined by landmark indices"""

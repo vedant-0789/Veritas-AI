@@ -319,7 +319,10 @@ class VeritasCore {
       const statusEl = document.getElementById('veritas-scan-status');
       if (statusEl) statusEl.textContent = "Acquiring Target...";
 
-      const frames = await this.veritasCapture.captureSequence(video, 15, 150);
+      const frameCount = 45;
+      const intervalMs = 66; // ~15 FPS
+      const fps = 1000 / intervalMs;
+      const frames = await this.veritasCapture.captureSequence(video, frameCount, intervalMs);
 
       if (frames.length === 0) throw new Error("Capture failed");
 
@@ -328,14 +331,15 @@ class VeritasCore {
 
       // Analyze via Background Script
       const response = await new Promise<any>((resolve, reject) => {
-        console.log("Veritas-AI: Sending ANALYZE_REQUEST");
+        console.log("Veritas-AI: Sending ANALYZE_REQUEST with FPS:", fps);
         chrome.runtime.sendMessage({
           type: 'ANALYZE_REQUEST',
           data: {
             frames: frames,
             video_url: window.location.href,
             consent_given: true,
-            enable_gemini: options.enable_gemini
+            enable_gemini: options.enable_gemini,
+            fps: fps
           }
         }, (responseCallback) => {
           console.log("Veritas-AI: Callback received", responseCallback, chrome.runtime.lastError);

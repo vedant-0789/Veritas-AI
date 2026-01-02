@@ -116,6 +116,7 @@ class AnalyzeRequest(BaseModel):
     video_url: Optional[str] = Field(None, description="Source video URL (for reference)")
     consent_given: bool = Field(True, description="User consent for biometric analysis")
     enable_gemini: bool = Field(True, description="Enable Gemini AI analysis")
+    fps: Optional[float] = Field(None, description="Frame rate of captured video")
 
 
 class AnalysisResult(BaseModel):
@@ -270,7 +271,7 @@ def analyze_video_sync(request: AnalyzeRequest):
                 raise HTTPException(status_code=400, detail=f"Invalid frame data: {str(e)}")
         
         # Run Bio-Guard (rPPG) analysis
-        bio_result = rppg_analyzer.analyze(decoded_frames)
+        bio_result = rppg_analyzer.analyze(decoded_frames, fps=request.fps)
         
         # Run Physics-Guard (Gemini) analysis
         if request.enable_gemini:
@@ -362,7 +363,7 @@ def process_analysis(task_id: str, request: AnalyzeRequest):
             return
         
         # Run Bio-Guard (rPPG) analysis
-        bio_result = rppg_analyzer.analyze(decoded_frames)
+        bio_result = rppg_analyzer.analyze(decoded_frames, fps=request.fps)
         
         # Run Physics-Guard (Gemini) analysis
         if request.enable_gemini:

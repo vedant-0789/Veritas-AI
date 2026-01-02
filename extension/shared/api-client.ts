@@ -11,6 +11,7 @@ export interface AnalysisRequest {
     video_url?: string;
     consent_given: boolean;
     enable_gemini?: boolean;
+    fps?: number;
 }
 
 export interface AnalysisResult {
