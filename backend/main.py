@@ -11,7 +11,9 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, FileResponse
+
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
@@ -39,6 +41,16 @@ app = FastAPI(
     description="Deepfake Detection API using Bio-Guard (rPPG), Physics-Guard (Gemini AI), and Temporal Analysis",
     version="1.1.0"
 )
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+
+@app.get("/")
+async def root():
+    """Root endpoint serving the landing page"""
+    return FileResponse('static/index.html')
 
 # Configure CORS for Chrome extension
 app.add_middleware(
