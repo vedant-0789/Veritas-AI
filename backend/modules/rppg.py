@@ -22,20 +22,20 @@ try:
         from mediapipe.python.solutions import drawing_utils as mp_drawing
         MEDIAPIPE_AVAILABLE = True
         MEDIAPIPE_USE_OLD_API = True
-        print("✅ MediaPipe (Solutions API) found via explicit import")
+        print("MediaPipe (Solutions API) found via explicit import")
     except ImportError:
         # Check if it's available on the mp module directly
         if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_mesh'):
             MEDIAPIPE_AVAILABLE = True
             MEDIAPIPE_USE_OLD_API = True
-            print("✅ MediaPipe (Solutions API) found via mp.solutions")
+            print("MediaPipe (Solutions API) found via mp.solutions")
         else:
             raise ImportError("MediaPipe Solutions API not found")
             
 except (ImportError, AttributeError, Exception) as e:
     MEDIAPIPE_AVAILABLE = False
     MEDIAPIPE_USE_OLD_API = False
-    print(f"⚠️ Warning: MediaPipe not available ({e}). Using OpenCV fallback face detection.")
+    print(f"Warning: MediaPipe not available ({e}). Using OpenCV fallback face detection.")
     print(f"   Note: Pulse detection will still work using center ROI method.")
 
 
@@ -69,11 +69,11 @@ class RPPGAnalyzer:
                         min_detection_confidence=0.5,
                         min_tracking_confidence=0.5
                     )
-                    print("✅ MediaPipe Face Mesh initialized successfully")
+                    print("MediaPipe Face Mesh initialized successfully")
                 else:
                     raise ImportError("Could not find face_mesh module")
             except Exception as e:
-                print(f"⚠️ MediaPipe initialization failed: {e}")
+                print(f"MediaPipe initialization failed: {e}")
                 self.face_mesh = None
         else:
             self.face_mesh = None
@@ -84,7 +84,7 @@ class RPPGAnalyzer:
                 if self.face_cascade.empty():
                     self.face_cascade = None
                 else:
-                    print("✅ Using OpenCV face detection fallback")
+                    print("Using OpenCV face detection fallback")
             except:
                 self.face_cascade = None
         

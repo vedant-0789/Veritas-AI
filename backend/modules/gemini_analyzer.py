@@ -34,14 +34,14 @@ class GeminiAnalyzer:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel('gemini-2.0-flash')
-                print("✅ Gemini AI initialized successfully")
+                print("Gemini AI initialized successfully")
             except Exception as e:
-                print(f"⚠️ Failed to initialize Gemini: {e}")
+                print(f"Failed to initialize Gemini: {e}")
         else:
             if not GEMINI_AVAILABLE:
-                print("⚠️ Gemini SDK not installed")
+                print("Gemini SDK not installed")
             if not self.api_key:
-                print("⚠️ GEMINI_API_KEY not set")
+                print("GEMINI_API_KEY not set")
     
     def analyze(self, frames: List[Dict]) -> Dict:
         """

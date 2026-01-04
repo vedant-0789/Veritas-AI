@@ -35,13 +35,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Return true to indicate async response
         (async () => {
             try {
-                // 1. Submit for analysis (Async)
+                console.log("Background: Submitting analysis to backend...");
                 const initialResult = await apiClient.analyzeVideo(request.data);
-                console.log("Background: Task submitted, ID:", initialResult.task_id);
+                console.log("Background: Task submitted successfully. TaskID:", initialResult.task_id);
 
-                // 2. Poll for completion
+                console.log("Background: Waiting for analysis completion (polling)...");
                 const finalResult = await apiClient.waitForAnalysis(initialResult.task_id);
-                console.log("Background: Analysis success", finalResult);
+                console.log("Background: Analysis completed successfully!");
 
                 addToHistory(finalResult);
                 sendResponse({ success: true, result: finalResult });

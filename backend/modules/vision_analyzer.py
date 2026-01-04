@@ -32,12 +32,12 @@ class VisionAnalyzer:
                 # Try to initialize with credentials
                 # Will use GOOGLE_APPLICATION_CREDENTIALS env var or default credentials
                 self.client = vision.ImageAnnotatorClient()
-                print("✅ Google Cloud Vision API initialized successfully")
+                print("Google Cloud Vision API initialized successfully")
             except Exception as e:
-                print(f"⚠️ Vision API initialization failed: {e}")
+                print(f"Vision API initialization failed: {e}")
                 print("   Note: Vision API is optional. Set GOOGLE_APPLICATION_CREDENTIALS for full features.")
         else:
-            print("⚠️ Vision API SDK not installed (optional feature)")
+            print("Vision API SDK not installed (optional feature)")
     
     def analyze(self, frames: List[Dict]) -> Dict:
         """

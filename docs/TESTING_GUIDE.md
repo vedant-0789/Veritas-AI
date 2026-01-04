@@ -262,3 +262,16 @@ Once everything works, you're ready to:
 
 Good luck! 🚀
 
+
+
+
+$env:PYTHONIOENCODING="utf-8" ; python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+
+
+
+Invoke-RestMethod -Uri http://localhost:8000/api/health
+
+
+
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess | Stop-Process -Force

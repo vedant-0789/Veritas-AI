@@ -153,24 +153,24 @@ class TemporalAnalyzer:
         
         # High consistency = real video
         if avg_consistency > 0.85 and std_consistency < 0.1:
-            findings.append("✅ Excellent frame-to-frame consistency")
+            findings.append("Excellent frame-to-frame consistency")
             score = 0.9
         elif avg_consistency > 0.75 and std_consistency < 0.15:
-            findings.append("✅ Good temporal consistency")
+            findings.append("Good temporal consistency")
             score = 0.75
         elif avg_consistency > 0.6:
-            findings.append("⚠️ Moderate temporal consistency")
+            findings.append("Moderate temporal consistency")
             score = 0.6
         elif avg_consistency > 0.4:
-            findings.append("❌ Low temporal consistency detected")
+            findings.append("Low temporal consistency detected")
             score = 0.4
         else:
-            findings.append("❌ Very low temporal consistency - possible deepfake")
+            findings.append("Very low temporal consistency - possible deepfake")
             score = 0.2
         
         # High variance indicates flickering (deepfake artifact)
         if std_consistency > 0.2:
-            findings.append("⚠️ High frame variance detected (possible flickering)")
+            findings.append("High frame variance detected (possible flickering)")
             score *= 0.7
         
         return max(0.0, min(1.0, score)), findings
@@ -204,21 +204,21 @@ class TemporalAnalyzer:
         
         # Real videos have smooth, gradual motion changes
         if motion_variance < 100 and avg_motion > 0:
-            findings.append("✅ Smooth, natural motion detected")
+            findings.append("Smooth, natural motion detected")
             score = 0.85
         elif motion_variance < 500:
-            findings.append("✅ Generally smooth motion")
+            findings.append("Generally smooth motion")
             score = 0.7
         elif motion_variance < 2000:
-            findings.append("⚠️ Some motion inconsistencies")
+            findings.append("Some motion inconsistencies")
             score = 0.5
         else:
-            findings.append("❌ Jerky or unnatural motion detected")
+            findings.append("Jerky or unnatural motion detected")
             score = 0.3
         
         # Very low motion might indicate static deepfake
         if avg_motion < 0.5:
-            findings.append("⚠️ Very low motion detected")
+            findings.append("Very low motion detected")
             score *= 0.8
         
         return max(0.0, min(1.0, score)), findings
@@ -248,16 +248,16 @@ class TemporalAnalyzer:
         
         # Real videos have consistent skin tones (with natural variations)
         if total_variance < 50:
-            findings.append("✅ Consistent skin tone across frames")
+            findings.append("Consistent skin tone across frames")
             score = 0.85
         elif total_variance < 150:
-            findings.append("✅ Generally consistent colors")
+            findings.append("Generally consistent colors")
             score = 0.7
         elif total_variance < 300:
-            findings.append("⚠️ Some color inconsistencies")
+            findings.append("Some color inconsistencies")
             score = 0.5
         else:
-            findings.append("❌ Significant color flickering detected")
+            findings.append("Significant color flickering detected")
             score = 0.3
         
         return max(0.0, min(1.0, score)), findings

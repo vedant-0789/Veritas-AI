@@ -425,8 +425,8 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     debug = os.getenv("DEBUG", "true").lower() == "true"
     
-    logger.info(f"🚀 Starting Veritas-AI Backend on {host}:{port}")
-    logger.info(f"📚 API Docs: http://localhost:{port}/docs")
-    logger.info(f"🔍 Debug mode: {debug}")
+    logger.info(f"Starting Veritas-AI Backend on {host}:{port}")
+    logger.info(f"API Docs: http://localhost:{port}/docs")
+    logger.info(f"Debug mode: {debug}")
     
     uvicorn.run("main:app", host=host, port=port, reload=debug, log_config=None)

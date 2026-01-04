@@ -64,25 +64,25 @@ class EnsembleDecision:
         # More lenient thresholds for better detection
         if pulse_detected and snr > 6 and bpm and 50 <= bpm <= 120:
             real_indicators.append(("strong_pulse", 0.40))
-            evidence.append(f"✅ Strong biological pulse detected: {int(bpm)} BPM (SNR: {snr:.1f})")
+            evidence.append(f"Strong biological pulse detected: {int(bpm)} BPM (SNR: {snr:.1f})")
         elif pulse_detected and snr > 3 and bio_confidence > 0.4:
             real_indicators.append(("moderate_pulse", 0.30))
-            evidence.append(f"✅ Biological pulse detected: {int(bpm) if bpm else '?'} BPM")
+            evidence.append(f"Biological pulse detected: {int(bpm) if bpm else '?'} BPM")
         elif pulse_detected and snr > 2:
             real_indicators.append(("weak_pulse", 0.20))
-            evidence.append(f"✅ Weak biological pulse detected: {int(bpm) if bpm else '?'} BPM (may be compressed video)")
+            evidence.append(f"Weak biological pulse detected: {int(bpm) if bpm else '?'} BPM (may be compressed video)")
         
         # Strong Real Indicator 2: AI confirms no artifacts
         if physics_available:
             if is_real is True and physics_confidence > 0.7:
                 real_indicators.append(("ai_confirms_real", 0.30))
-                evidence.append("✅ AI analysis confirms authentic human characteristics")
+                evidence.append("AI analysis confirms authentic human characteristics")
             elif is_suspicious is False and physics_confidence > 0.7:
                 real_indicators.append(("no_artifacts", 0.25))
-                evidence.append("✅ No AI manipulation artifacts detected")
+                evidence.append("No AI manipulation artifacts detected")
             elif is_suspicious is True and physics_confidence > 0.7:
                 fake_indicators.append(("suspicious_artifacts", 0.35))
-                evidence.append("❌ AI detected manipulation artifacts")
+                evidence.append("AI detected manipulation artifacts")
                 for finding in physics_findings[:2]:
                     evidence.append(f"   • {finding}")
         
@@ -92,30 +92,30 @@ class EnsembleDecision:
         # More strict - only flag as fake if really no signal
         if not pulse_detected and snr < 0.5:
             fake_indicators.append(("no_pulse", 0.35))
-            evidence.append("❌ No biological pulse signal detected")
+            evidence.append("No biological pulse signal detected")
         elif not pulse_detected and snr < 1.5:
             fake_indicators.append(("weak_pulse", 0.25))
-            evidence.append("❌ Very weak or no biological signals")
+            evidence.append("Very weak or no biological signals")
         elif not pulse_detected and snr < 2.5:
             fake_indicators.append(("very_weak_pulse", 0.15))
-            evidence.append("⚠️ Weak biological signals (possible deepfake or heavy compression)")
+            evidence.append("Weak biological signals (possible deepfake or heavy compression)")
         
         # Strong Fake Indicator 2: AI strongly indicates fake
         if physics_available and is_suspicious is True and physics_confidence > 0.6:
             fake_indicators.append(("ai_detected_fake", 0.45))
-            evidence.append("🤖 AI analysis detected specific manipulation artifacts")
+            evidence.append("AI analysis detected specific manipulation artifacts")
             
         # New: Synthetic Pulse Detection
         if is_synthetic:
             fake_indicators.append(("synthetic_pulse", 0.50))
-            evidence.append("🚨 Suspiciously perfect periodic signal detected (Synthetic Pulse Artifact)")
+            evidence.append("Suspiciously perfect periodic signal detected (Synthetic Pulse Artifact)")
         
         # Vision API indicators (if available)
         if vision_result and vision_result.get("available"):
             face_confidence = vision_result.get("face_confidence", 0)
             if face_confidence > 0.8:
                 real_indicators.append(("vision_high_quality", 0.10))
-                evidence.append("✅ High-quality face detection (Vision API)")
+                evidence.append("High-quality face detection (Vision API)")
         
         # Temporal consistency indicators (if available)
         if temporal_result and temporal_result.get("available"):
@@ -124,20 +124,18 @@ class EnsembleDecision:
             
             if temporal_consistency > 0.75:
                 real_indicators.append(("high_temporal_consistency", 0.20))
-                evidence.append("✅ High temporal consistency detected")
+                evidence.append("High temporal consistency detected")
                 for finding in temporal_findings[:2]:
-                    if "✅" in finding or "consistent" in finding.lower():
-                        evidence.append(f"   • {finding}")
+                        evidence.append(f"   . {finding}")
             elif temporal_consistency < 0.4:
                 fake_indicators.append(("low_temporal_consistency", 0.25))
-                evidence.append("❌ Low temporal consistency (possible manipulation)")
+                evidence.append("Low temporal consistency (possible manipulation)")
                 for finding in temporal_findings[:2]:
-                    if "❌" in finding or "inconsistent" in finding.lower():
-                        evidence.append(f"   • {finding}")
+                        evidence.append(f"   . {finding}")
         
         # New: Multi-face Detection Warning
         if bio_result.get("details", {}).get("multi_face"):
-            evidence.append("⚠️ Multi-face detected. Analysis restricted to primary face.")
+            evidence.append("Multi-face detected. Analysis restricted to primary face.")
             evidence.append("   Note: Multi-face precision mode currently unavailable.")
         
         # Adjust weights based on available data
@@ -183,18 +181,22 @@ class EnsembleDecision:
             elif indicator == "low_temporal_consistency":
                 temporal_consistency = temporal_result.get("temporal_consistency", 0.5) if temporal_result else 0.5
                 real_score -= weight * (1.0 - temporal_consistency)
+            elif indicator == "synthetic_pulse":
+                real_score -= weight * 1.5 # Heavier penalty for synthetic injection
+            elif indicator == "ai_detected_fake":
+                real_score -= weight * physics_confidence
         
         # Special overrides for very strong evidence
         # Override 1: Very strong pulse = likely real (balanced thresholds)
         if pulse_detected and 4 <= snr <= 40 and bio_confidence > 0.70 and 50 <= bpm <= 100 and not is_synthetic:
             real_score = max(real_score, 0.85)
             if "🔬 Strong biological authenticity" not in str(evidence):
-                evidence.insert(0, "🔬 Strong biological authenticity signals detected")
+                evidence.insert(0, "Strong biological authenticity signals detected")
         
         # Override 1b: If pulse is ABSURDLY strong, then it's a fake
         if snr > 50:
             real_score = min(real_score, 0.20)
-            evidence.append("🚨 Excessive Signal-to-Noise ratio (SNR > 50) - Likely synthetic injection")
+            evidence.append("Excessive Signal-to-Noise ratio (SNR > 50) - Likely synthetic injection")
         
         # Override 1b: Good pulse + AI confirms real = very high confidence real
         if pulse_detected and snr > 3 and (is_real is True or is_suspicious is False) and physics_confidence > 0.65:
@@ -204,7 +206,7 @@ class EnsembleDecision:
         if not pulse_detected and snr < 1.0 and physics_available and is_suspicious and physics_confidence > 0.75:
             real_score = min(real_score, 0.12)
             if "🚨 Multiple indicators" not in str(evidence):
-                evidence.insert(0, "🚨 Multiple strong indicators of synthetic content")
+                evidence.insert(0, "Multiple strong indicators of synthetic content")
         
         # Override 2b: Very strong AI fake signal = high confidence fake
         if physics_available and is_suspicious and physics_confidence > 0.90:
@@ -228,7 +230,7 @@ class EnsembleDecision:
             if temporal_consistency < 0.3 and not pulse_detected:
                 real_score = min(real_score, 0.20)
                 if "🚨 Temporal inconsistencies" not in str(evidence):
-                    evidence.insert(0, "🚨 Temporal inconsistencies detected")
+                    evidence.insert(0, "Temporal inconsistencies detected")
         
         # Clamp to [0, 1]
         real_score = max(0.0, min(1.0, real_score))
@@ -239,7 +241,7 @@ class EnsembleDecision:
         
         if real_score >= 0.65:  # 65%+ = LIKELY REAL
             verdict = "LIKELY_REAL"
-            verdict_display = "✅ LIKELY REAL"
+            verdict_display = "LIKELY REAL"
             # For real videos: map 0.65-1.0 to 0.75-0.95 confidence
             # Strong real evidence (0.85+) gets 90-95% confidence
             if real_score >= 0.85:
@@ -251,7 +253,7 @@ class EnsembleDecision:
             
         elif real_score <= 0.35:  # 35%- = LIKELY FAKE
             verdict = "LIKELY_FAKE"
-            verdict_display = "❌ LIKELY FAKE"
+            verdict_display = "LIKELY FAKE"
             # For fake videos: map 0.35-0.0 to 0.85-1.0 confidence
             # Strong fake evidence (0.15-) gets 95-100% confidence
             if real_score <= 0.15:
@@ -263,14 +265,14 @@ class EnsembleDecision:
                 
         else:  # 35-65% = UNCERTAIN
             verdict = "UNCERTAIN"
-            verdict_display = "⚠️ UNCERTAIN"
+            verdict_display = "UNCERTAIN"
             # For uncertain: lower confidence
             confidence = 0.40 + (abs(real_score - 0.50) * 0.40)
             
         # Final penalty: If AI is uncertain but Score is high, reduce confidence
         if verdict == "LIKELY_REAL" and physics_available and physics_confidence < 0.5:
             confidence *= 0.85
-            evidence.append("⚠️ Bio-Guard is confident but Physics-Guard remains uncertain")
+            evidence.append("Bio-Guard is confident but Physics-Guard remains uncertain")
         
         # Generate summary
         summary = self._generate_summary(verdict, bio_result, physics_result)

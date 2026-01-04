@@ -167,16 +167,16 @@ class AdvancedAnalyzer:
             # Real videos have natural mouth movement variation
             if 0.1 < mouth_variance < 0.5:
                 score = 0.85
-                findings = ["✅ Natural lip movement detected"]
+                findings = ["Natural lip movement detected"]
             elif mouth_variance < 0.05:
                 score = 0.3
-                findings = ["❌ Static or unnatural lip movement"]
+                findings = ["Static or unnatural lip movement"]
             elif mouth_variance > 1.0:
                 score = 0.4
-                findings = ["⚠️ Erratic lip movement (possible manipulation)"]
+                findings = ["Erratic lip movement (possible manipulation)"]
             else:
                 score = 0.6
-                findings = ["⚠️ Moderate lip movement"]
+                findings = ["Moderate lip movement"]
             
             return {
                 "score": score,
@@ -216,10 +216,10 @@ class AdvancedAnalyzer:
             
             if len(breathing_power) > 0 and np.max(breathing_power) > np.mean(breathing_power) * 1.5:
                 score = 0.8
-                findings = ["✅ Natural breathing pattern detected"]
+                findings = ["Natural breathing pattern detected"]
             else:
                 score = 0.5
-                findings = ["⚠️ Breathing pattern not clearly detected"]
+                findings = ["Breathing pattern not clearly detected"]
             
             return {
                 "score": score,
@@ -255,13 +255,13 @@ class AdvancedAnalyzer:
             # Moderate variation indicates natural micro-expressions
             if 50 < texture_variance < 500:
                 score = 0.85
-                findings = ["✅ Natural micro-expressions detected"]
+                findings = ["Natural micro-expressions detected"]
             elif texture_variance < 20:
                 score = 0.3
-                findings = ["❌ Very static face (possible deepfake)"]
+                findings = ["Very static face (possible deepfake)"]
             else:
                 score = 0.6
-                findings = ["⚠️ Moderate facial texture variation"]
+                findings = ["Moderate facial texture variation"]
             
             return {
                 "score": score,
@@ -306,16 +306,16 @@ class AdvancedAnalyzer:
             # Real head movement is smooth and gradual
             if 0 < avg_movement < 50 and movement_variance < 100:
                 score = 0.85
-                findings = ["✅ Natural, smooth head movement"]
+                findings = ["Natural, smooth head movement"]
             elif avg_movement == 0:
                 score = 0.4
-                findings = ["❌ No head movement (static deepfake)"]
+                findings = ["No head movement (static deepfake)"]
             elif movement_variance > 500:
                 score = 0.3
-                findings = ["❌ Jerky or unnatural head movement"]
+                findings = ["Jerky or unnatural head movement"]
             else:
                 score = 0.6
-                findings = ["⚠️ Moderate head movement"]
+                findings = ["Moderate head movement"]
             
             return {
                 "score": score,
