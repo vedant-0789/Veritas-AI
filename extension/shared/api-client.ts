@@ -4,7 +4,7 @@
  * Handles communication with the local Python backend
  */
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'https://veritas-ai-vhbc.onrender.com/api';
 
 export interface AnalysisRequest {
     frames: Array<{ data: string; timestamp: number }>;
