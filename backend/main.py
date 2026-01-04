@@ -157,6 +157,16 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+@app.get("/")
+async def root():
+    """Root endpoint for basic connectivity test"""
+    return {
+        "message": "Veritas-AI API is running",
+        "docs_url": "/docs",
+        "health_check": "/api/health"
+    }
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
