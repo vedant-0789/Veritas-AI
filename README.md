@@ -6,6 +6,8 @@
 [![Chrome Extension](https://img.shields.io/badge/platform-Chrome-orange.svg)](https://developer.chrome.com/docs/extensions/)
 
 > **The Digital Bio-Guard: Real-time Deepfake Detection using Biometric Signal Analysis (rPPG) and Multimodal AI.**
+>
+> 🔴 **Live Demo:** [https://veritas-ai-vhbc.onrender.com/](https://veritas-ai-vhbc.onrender.com/)
 
 ![Veritas-AI Banner](docs/assets/banner_final.png)
 
